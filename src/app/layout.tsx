@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
+import { AuthProvider } from "@/features/auth/auth-provider";
+import { AuthRouteBoundary } from "@/features/auth/auth-route-boundary";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -19,5 +21,5 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body><ServiceWorkerRegister />{children}</body></html>;
+  return <html lang="en"><body><ServiceWorkerRegister /><AuthProvider><AuthRouteBoundary>{children}</AuthRouteBoundary></AuthProvider></body></html>;
 }

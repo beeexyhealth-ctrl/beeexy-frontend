@@ -107,7 +107,7 @@ export function HomeDashboard({ configured, email, name, signedIn }: HomeDashboa
       <p className="hero-copy">Hi, I’m here to help you understand your symptoms, then connect with a doctor if needed in under minutes.</p>
 
       {!signedIn && (
-        <Link href="/sign-in" className="unlock-banner">
+        <Link href="/login" className="unlock-banner">
           <span className="unlock-icon"><Icon name="lock" size={18} /></span>
           <span className="unlock-content"><strong>Unlock your clinical profile</strong><small>{configured ? "Save assessments, appointments and your care history." : "Explore safely in local review mode. Connect your account when ready."}</small></span>
           <span className="unlock-action">Sign in <Icon name="chevron-right" size={13} /></span>
@@ -130,12 +130,12 @@ export function HomeDashboard({ configured, email, name, signedIn }: HomeDashboa
       <button className={`drawer-scrim ${menuOpen ? "open" : ""}`} aria-label="Close menu" tabIndex={menuOpen ? 0 : -1} onClick={() => setMenuOpen(false)} />
       <aside className={`side-drawer ${menuOpen ? "open" : ""}`} aria-label="Menu" aria-hidden={!menuOpen}>
         <div className="drawer-top"><span className="brand-word">Beeexy<span>.</span></span><button className="icon-button" aria-label="Close menu" onClick={() => setMenuOpen(false)}><Icon name="close" size={18} /></button></div>
-        <Link href={signedIn ? "/my-health" : "/sign-in"} className="drawer-user-card" onClick={() => setMenuOpen(false)}>
+        <Link href={signedIn ? "/my-health" : "/login"} className="drawer-user-card" onClick={() => setMenuOpen(false)}>
           <span className="avatar">{signedIn ? initial : <Icon name="user" size={19} />}</span>
-          <span><strong>{signedIn ? name : "Welcome to Beeexy"}</strong><small>{signedIn ? email : "Sign in to unlock all features"}</small></span>
+          <span><strong>{signedIn ? displayName : "Welcome to Beeexy"}</strong><small>{signedIn ? email : "Sign in to unlock all features"}</small></span>
           <Icon name="chevron-right" size={16} />
         </Link>
-        {!signedIn && <Link href="/sign-in" className="button primary wide drawer-signin" onClick={() => setMenuOpen(false)}>Sign in or create account</Link>}
+        {!signedIn && <Link href="/login" className="button primary wide drawer-signin" onClick={() => setMenuOpen(false)}>Sign in or create account</Link>}
         <div className="drawer-group"><p>Preferences</p><DrawerLink href="/settings" icon="settings" label="Settings" close={() => setMenuOpen(false)} /><DrawerLink href="/notifications" icon="bell" label="Notifications" close={() => setMenuOpen(false)} /></div>
         <div className="drawer-group"><p>Your health</p><DrawerLink href="/my-health" icon="heart" label="My Health" close={() => setMenuOpen(false)} /><DrawerLink href="/my-health/circle" icon="users" label="My Circle" close={() => setMenuOpen(false)} /></div>
         <div className="drawer-group"><p>About</p><DrawerLink href="/settings#privacy" icon="shield" label="Privacy & Security" close={() => setMenuOpen(false)} /><DrawerLink href="/settings#help" icon="info" label="Help & Support" close={() => setMenuOpen(false)} /></div>
