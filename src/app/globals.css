@@ -540,3 +540,120 @@ textarea { min-height: 112px; resize: vertical; line-height: 1.5; }
 @media (prefers-reduced-motion: reduce) {
   .entry-loading-line::after, .onboarding-content, .login-view { animation: none !important; }
 }
+
+/* Phase 3: patient context and My Circle */
+.patient-switcher { position: relative; z-index: 45; display: flex; min-height: 58px; align-items: center; gap: 11px; flex: 0 0 auto; border-bottom: 1px solid var(--line); padding: 8px 19px; background: rgba(255,255,255,.97); backdrop-filter: blur(16px); }
+.patient-switcher label { color: var(--ink-3); font-family: var(--font-display); font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
+.patient-switcher select { min-width: 0; min-height: 40px; flex: 1; overflow: hidden; border-color: var(--primary-line); padding: 8px 34px 8px 11px; color: var(--ink); background-color: var(--primary-soft); font-family: var(--font-display); font-size: 11px; font-weight: 600; text-overflow: ellipsis; }
+
+.profile-gate-shell { min-height: 100dvh; overflow-y: auto; padding: calc(24px + env(safe-area-inset-top)) 20px calc(34px + env(safe-area-inset-bottom)); background: #f8f8fc; }
+.profile-gate-top { width: min(100%, 620px); margin: 0 auto 24px; }
+.profile-gate-card { width: min(100%, 620px); margin: 0 auto; border: 1px solid var(--line); border-radius: 24px; padding: clamp(22px, 4vw, 34px); background: #fff; box-shadow: var(--shadow-card); }
+.profile-gate-card > h1 { margin-top: 7px; font-size: clamp(27px, 5vw, 36px); line-height: 1.13; }
+.profile-gate-card > p:not(.entry-eyebrow) { max-width: 500px; margin-top: 9px; color: var(--ink-2); font-size: 14px; line-height: 1.55; }
+.profile-gate-card > form { margin-top: 25px; }
+.profile-gate-card .entry-primary-button { margin-top: 20px; }
+.care-choice-card { max-width: 540px; }
+.care-choice-list { display: grid; gap: 12px; margin-top: 27px; }
+.care-choice-list > button { display: flex; width: 100%; min-height: 82px; align-items: center; gap: 13px; border: 1px solid var(--line-strong); border-radius: 17px; padding: 15px; text-align: left; background: #fff; transition: border-color var(--duration-fast), background var(--duration-fast), box-shadow var(--duration-fast), transform var(--duration-fast); }
+.care-choice-list > button:hover { border-color: var(--primary-line); background: var(--primary-soft); box-shadow: var(--shadow-card); transform: translateY(-1px); }
+.care-choice-list > button:active { transform: scale(.99); }
+.care-choice-list > button > span:first-child { display: grid; width: 45px; height: 45px; flex: 0 0 auto; place-items: center; border-radius: 14px; color: var(--primary); background: var(--primary-soft); }
+.care-choice-list > button > span:nth-child(2) { min-width: 0; flex: 1; }
+.care-choice-list strong, .care-choice-list small { display: block; }
+.care-choice-list strong { font-family: var(--font-display); font-size: 14px; }
+.care-choice-list small { margin-top: 4px; color: var(--ink-2); font-size: 12px; line-height: 1.4; }
+.care-choice-list > button > svg { color: var(--ink-3); }
+
+.patient-form { display: grid; gap: 15px; }
+.patient-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.patient-form-grid > label, .relationship-field { display: block; color: var(--ink); font-family: var(--font-display); font-size: 11px; font-weight: 600; }
+.patient-form-grid input, .patient-form-grid select, .relationship-field select { margin-top: 7px; }
+.patient-state-field, .patient-sex-field { grid-column: 1 / -1; }
+.patient-sex-field { min-width: 0; margin: 0; padding: 0; border: 0; }
+.patient-sex-field legend { margin-bottom: 7px; padding: 0; font-family: var(--font-display); font-size: 11px; font-weight: 600; }
+.patient-sex-field > div { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.patient-sex-field > div label { position: relative; display: flex; min-height: 48px; align-items: center; justify-content: center; border: 1px solid var(--line-strong); border-radius: 12px; background: #fff; transition: border-color var(--duration-fast), background var(--duration-fast); }
+.patient-sex-field > div label:hover { border-color: var(--primary-line); }
+.patient-sex-field > div label.selected { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); box-shadow: 0 0 0 1px var(--primary); }
+.patient-sex-field input { position: absolute; width: 1px; height: 1px; min-height: 0; opacity: 0; }
+.patient-sex-field input:focus-visible + span { outline: 3px solid rgba(67,64,232,.28); outline-offset: 5px; }
+.patient-sex-field span { font-family: var(--font-display); font-size: 12px; font-weight: 600; }
+.field-error { display: block; margin-top: 5px; color: var(--red); font-family: var(--font-body); font-size: 11px; font-weight: 400; line-height: 1.4; }
+.patient-form-alert { border: 1px solid rgba(220,38,38,.14); border-radius: 12px; padding: 11px 13px; color: #a51d1d; background: var(--red-soft); font-size: 12px; line-height: 1.45; }
+.patient-editor-heading { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 20px; }
+.patient-editor-heading > span { display: grid; width: 44px; height: 44px; flex: 0 0 auto; place-items: center; border-radius: 14px; color: var(--primary); background: var(--primary-soft); }
+.patient-editor-heading h1 { margin-top: 3px; font-size: 20px; }
+.patient-editor-heading div > p:last-child { margin-top: 4px; color: var(--ink-2); font-size: 11px; line-height: 1.45; }
+.patient-editor-page .patient-form { padding: 15px; border: 1px solid var(--line); border-radius: 17px; background: #fff; }
+.add-patient-gate > .back-link { margin-top: -10px; }
+.relationship-field { display: block; }
+.attestation-panel { border: 1px solid var(--primary-line); border-radius: 14px; padding: 13px; background: var(--primary-soft); }
+.attestation-panel h2 { font-size: 11px; }
+.attestation-panel label { display: flex; align-items: flex-start; gap: 10px; margin-top: 8px; cursor: pointer; }
+.attestation-panel input { width: 18px; height: 18px; min-height: 18px; flex: 0 0 auto; margin-top: 1px; accent-color: var(--primary); }
+.attestation-panel label span, .attestation-panel p { color: var(--ink-2); font-size: 11px; line-height: 1.5; }
+.attestation-panel.unavailable { border-color: rgba(180,83,9,.2); background: var(--amber-soft); }
+.attestation-panel.unavailable p { margin-top: 6px; color: #74420c; }
+
+.circle-status-row { display: flex; min-height: 28px; align-items: center; justify-content: space-between; color: var(--ink-3); font-size: 10px; }
+.circle-notice { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; border-radius: 12px; padding: 10px 11px; color: #74420c; background: var(--amber-soft); font-size: 10.5px; line-height: 1.4; }
+.circle-notice span { flex: 1; }
+.circle-notice button { min-height: 32px; border: 0; padding: 4px 6px; color: var(--amber); background: transparent; font-family: var(--font-display); font-size: 10px; font-weight: 600; }
+.phase-three-circle { gap: 9px; }
+.phase-three-circle > a { display: flex; min-height: 70px; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 15px; padding: 11px 12px; background: #fff; box-shadow: var(--shadow-card); transition: border-color var(--duration-fast), background var(--duration-fast), transform var(--duration-fast); }
+.phase-three-circle > a:hover { border-color: var(--primary-line); background: var(--surface-subtle); transform: translateY(-1px); }
+.phase-three-circle > a.active { border-color: var(--primary-line); }
+.circle-avatar { display: grid; width: 43px; height: 43px; flex: 0 0 auto; place-items: center; border-radius: 50%; color: #fff; background: var(--primary); font-family: var(--font-display); font-size: 11px; font-weight: 700; }
+.circle-member-copy { min-width: 0; flex: 1; }
+.circle-member-copy strong, .circle-member-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.circle-member-copy strong { font-family: var(--font-display); font-size: 12px; }
+.circle-member-copy small { margin-top: 4px; color: var(--ink-2); font-size: 10px; }
+.active-context { border-radius: 99px; padding: 4px 7px; color: var(--green); background: var(--green-soft); font-family: var(--font-display); font-size: 8px; font-weight: 700; text-transform: uppercase; }
+.phase-three-circle > a > svg { flex: 0 0 auto; color: var(--ink-3); }
+.circle-history { margin-top: 24px; }
+.circle-history > h2 { font-size: 13px; }
+.circle-history > p { margin: 4px 0 10px; color: var(--ink-2); font-size: 10px; line-height: 1.45; }
+.circle-history > div { overflow: hidden; border: 1px solid var(--line); border-radius: 14px; }
+.circle-history article { display: flex; align-items: center; gap: 9px; border-bottom: 1px solid var(--line); padding: 10px 11px; opacity: .7; }
+.circle-history article:last-child { border-bottom: 0; }
+.circle-history article > span { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 50%; color: var(--ink-2); background: var(--surface-subtle); font-family: var(--font-display); font-size: 9px; font-weight: 700; }
+.circle-history strong, .circle-history small { display: block; }
+.circle-history strong { font-family: var(--font-display); font-size: 10.5px; }
+.circle-history small { margin-top: 2px; color: var(--ink-2); font-size: 9px; }
+
+.patient-detail-hero { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; border-radius: 17px; padding: 15px; color: #fff; background: var(--primary); box-shadow: var(--shadow-primary); }
+.patient-detail-hero > span { display: grid; width: 49px; height: 49px; flex: 0 0 auto; place-items: center; border-radius: 50%; background: rgba(255,255,255,.16); font-family: var(--font-display); font-size: 13px; font-weight: 700; }
+.patient-detail-hero h1 { overflow: hidden; font-size: 17px; text-overflow: ellipsis; white-space: nowrap; }
+.patient-detail-hero p { margin-top: 3px; color: rgba(255,255,255,.75); font-size: 10.5px; }
+.patient-detail-list { overflow: hidden; margin: 0; border: 1px solid var(--line); border-radius: 15px; background: #fff; }
+.patient-detail-list > div { display: grid; grid-template-columns: minmax(100px, .8fr) minmax(0, 1.2fr); gap: 12px; border-bottom: 1px solid var(--line); padding: 12px 13px; }
+.patient-detail-list > div:last-child { border-bottom: 0; }
+.patient-detail-list dt { color: var(--ink-3); font-size: 10px; }
+.patient-detail-list dd { overflow-wrap: anywhere; margin: 0; text-align: right; font-family: var(--font-display); font-size: 10.5px; font-weight: 600; }
+.patient-detail-list dd.empty { color: var(--ink-3); font-weight: 400; }
+.patient-detail-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 13px; }
+.patient-remove { margin-top: 8px; }
+.patient-detail-loading { display: grid; gap: 10px; padding: 20px 0; }
+.patient-detail-loading span { height: 58px; border-radius: 14px; background: linear-gradient(90deg, #f4f4f8 25%, #ececf3 50%, #f4f4f8 75%); background-size: 200% 100%; animation: shimmer 1.2s infinite; }
+.patient-dialog-backdrop { position: absolute; z-index: 100; inset: 0; display: grid; align-items: end; padding: 18px; background: rgba(15,15,20,.5); }
+.patient-dialog { border-radius: 20px; padding: 21px; background: #fff; box-shadow: var(--shadow-popover); animation: modalUp 240ms var(--ease-view) both; }
+.patient-dialog > span { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 14px; color: var(--red); background: var(--red-soft); }
+.patient-dialog h2 { margin-top: 15px; font-size: 18px; line-height: 1.25; }
+.patient-dialog p { margin-top: 8px; color: var(--ink-2); font-size: 12px; line-height: 1.55; }
+.patient-dialog > div { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 18px; }
+
+@media (max-width: 480px) {
+  .profile-gate-shell { padding-right: 0; padding-left: 0; background: #fff; }
+  .profile-gate-top { padding: 0 20px; }
+  .profile-gate-card { border: 0; border-radius: 0; padding: 10px 20px 30px; box-shadow: none; }
+  .patient-form-grid { grid-template-columns: 1fr; }
+  .patient-state-field, .patient-sex-field { grid-column: auto; }
+}
+
+@media (max-width: 350px) {
+  .patient-switcher { padding-right: 14px; padding-left: 14px; }
+  .patient-switcher label { font-size: 8px; }
+  .patient-detail-actions { grid-template-columns: 1fr; }
+  .patient-sex-field > div { gap: 7px; }
+}

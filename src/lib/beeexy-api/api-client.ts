@@ -8,7 +8,7 @@ type FetchImplementation = (input: RequestInfo | URL, init?: RequestInit) => Pro
 type RequestOptions = {
   body?: unknown;
   expectedStatus?: number;
-  method?: "GET" | "POST" | "PATCH";
+  method?: "GET" | "POST" | "PATCH" | "DELETE";
 };
 
 const ACCESS_TOKEN_SKEW_MS = 30_000;

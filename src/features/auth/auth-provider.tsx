@@ -75,7 +75,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [clearState, loadAuthoritativeState]);
 
   useEffect(() => {
-    const unsubscribe = beeexySessionStore.subscribe((nextSession) => setSession(nextSession));
+    const unsubscribe = beeexySessionStore.subscribe((nextSession) => {
+      setSession(nextSession);
+      if (!nextSession) {
+        setAccount(null);
+        setPatient(null);
+        setStatus("unauthenticated");
+      }
+    });
     const storedSession = beeexySessionStore.read();
     if (!storedSession) {
       const frame = requestAnimationFrame(() => setStatus("unauthenticated"));

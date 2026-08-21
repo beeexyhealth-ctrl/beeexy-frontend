@@ -25,6 +25,7 @@ export class BeeexyNetworkError extends Error {
 
 function safeMessageForStatus(status: number) {
   if (status === 401) return "The authentication request was not accepted.";
+  if (status === 404) return "The requested resource is unavailable.";
   if (status === 409) return "The request conflicts with the current server state.";
   if (status === 422) return "The submitted information is not valid.";
   if (status === 429) return "Too many requests were made.";

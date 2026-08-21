@@ -1,9 +1,14 @@
-import { AppShell } from "@/components/layout/app-shell";
-import { MyHealthDashboard } from "@/features/my-health/my-health-dashboard";
-import { getCurrentUser } from "@/lib/supabase/server";
+"use client";
 
-export default async function MyHealthPage() {
-  const user = await getCurrentUser();
-  const name = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Beeexy user";
-  return <AppShell><MyHealthDashboard email={user?.email || "Local review mode"} name={name} /></AppShell>;
+import { AppShell } from "@/components/layout/app-shell";
+import { useAuth } from "@/features/auth/auth-provider";
+import { MyHealthDashboard } from "@/features/my-health/my-health-dashboard";
+import { usePatients } from "@/features/my-circle/patient-provider";
+import { displayPatientName } from "@/features/my-circle/patient-state";
+
+export default function MyHealthPage() {
+  const { patient } = useAuth();
+  const { activePatient } = usePatients();
+  const name = activePatient ? displayPatientName(activePatient) : "Beeexy member";
+  return <AppShell><MyHealthDashboard email={patient?.beeexyId || "Beeexy profile"} name={name} /></AppShell>;
 }
