@@ -1,214 +1,315 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { FormEvent, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { FlowFrame } from "@/components/layout/flow-frame";
-import { Icon } from "@/components/ui/icon";
-import type { PreTriageAnswers, PreTriageSession } from "@/types/domain";
-import { completeAssessment, saveAssessmentDraft } from "./actions";
-import { DEMO_ASSESSMENT_RESULT } from "./demo-result";
+import { Icon, type IconName } from "@/components/ui/icon";
+import { useAuth } from "@/features/auth/auth-provider";
+import { usePatients } from "@/features/my-circle/patient-provider";
+import { displayPatientName } from "@/features/my-circle/patient-state";
+import type {
+  AdditionalSymptom,
+  DurationUnit,
+  NextQuestion,
+  NeutralPreTriageResult,
+  PreTriagePathway,
+  QuestionnaireProgress,
+  SubmitPreTriageAnswersRequest,
+} from "@/lib/beeexy-api/contracts";
+import { BeeexyApiError } from "@/lib/beeexy-api/problem-details";
+import { intakeOutcomeMessage, preTriageErrorMessage } from "./pre-triage-errors";
+import { usePreTriage } from "./pre-triage-provider";
 
-const initialAnswers: Partial<PreTriageAnswers> = {
-  watchedEducation: null,
-  viewedTimeline: null,
-  duration: null,
-  painLevel: 5,
-  otherSymptoms: null,
+export const SUPPORTED_PATHWAYS: ReadonlyArray<{ code: PreTriagePathway; label: string; icon: IconName }> = [
+  { code: "HEADACHE", label: "Headache", icon: "brain" },
+  { code: "ABDOMINAL_PAIN", label: "Stomach pain", icon: "activity" },
+  { code: "FEVER", label: "Fever", icon: "activity" },
+];
+
+const DURATION_UNITS: DurationUnit[] = ["MINUTES", "HOURS", "DAYS", "WEEKS", "MONTHS"];
+const ADDITIONAL_LABELS: Record<AdditionalSymptom, string> = { NAUSEA: "Nausea", DIARRHEA: "Diarrhea", FEVER: "Fever" };
+const INITIAL_DURATION_QUESTION: NextQuestion = {
+  code: "DURATION",
+  prompt: "How long have you had this symptom?",
+  answerType: "DURATION",
+  allowedValues: [],
+  allowedUnits: DURATION_UNITS,
+  minimum: null,
+  maximum: null,
 };
 
-const durations = ["Today / Just now", "1–3 days ago", "1 week or more", "It’s chronic"];
-const symptoms = ["Headache", "Stomach pain", "Chest pain", "Fever"];
-const otherSymptoms = ["Nausea or vomiting", "Fever", "Dizziness or vision changes", "None of the above"];
+export function PreTriageStartScreen() {
+  const router = useRouter();
+  const { status: authStatus } = useAuth();
+  const { activePatient, patients, selectActivePatient } = usePatients();
+  const { abandon, active, error, hydrated, operation, start } = usePreTriage();
+  const [selectedPatientId, setSelectedPatientId] = useState(activePatient?.profileId || "");
+  const [selectedPathway, setSelectedPathway] = useState<PreTriagePathway | null>(null);
 
-export function PreTriageFlow({ initialSession, dependentId }: { initialSession?: PreTriageSession | null; dependentId?: string | null }) {
-  const [assessmentId, setAssessmentId] = useState(initialSession?.id);
-  const [step, setStep] = useState(initialSession?.currentStep || 0);
-  const [answers, setAnswers] = useState<Partial<PreTriageAnswers>>(initialSession?.answers || initialAnswers);
-  const [error, setError] = useState("");
-  const [isPending, startTransition] = useTransition();
+  const mode = authStatus === "authenticated" ? "authenticated" : "anonymous";
+  const resolvedPatientId = selectedPatientId || activePatient?.profileId || "";
+  const selectedPatient = patients.find((patient) => patient.profileId === resolvedPatientId) || activePatient;
 
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      if (initialSession) return;
-      const saved = localStorage.getItem("beeexy_assessment_draft");
-      if (!saved) return;
-      try {
-        const draft = JSON.parse(saved) as { id?: string; currentStep?: number; answers?: Partial<PreTriageAnswers> };
-        setAssessmentId(draft.id);
-        setStep(draft.currentStep || 0);
-        setAnswers({ ...initialAnswers, ...draft.answers });
-      } catch {
-        localStorage.removeItem("beeexy_assessment_draft");
-      }
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [initialSession]);
-
-  function persist(nextStep: number, nextAnswers: Partial<PreTriageAnswers>, complete = false) {
-    setError("");
-    startTransition(async () => {
-      try {
-        const saved = await saveAssessmentDraft({ id: assessmentId, dependentId, currentStep: nextStep, answers: nextAnswers });
-        setAssessmentId(saved.id);
-        if (saved.mode === "local") localStorage.setItem("beeexy_assessment_draft", JSON.stringify({ id: saved.id, currentStep: nextStep, answers: nextAnswers }));
-        if (complete) {
-          const full = nextAnswers as PreTriageAnswers;
-          await completeAssessment(saved.id, full);
-          if (saved.mode === "local") {
-            const history = JSON.parse(localStorage.getItem("beeexy_history") || "[]") as unknown[];
-            history.unshift({ id: saved.id, status: "completed", answers: full, result: DEMO_ASSESSMENT_RESULT, createdAt: new Date().toISOString() });
-            localStorage.setItem("beeexy_history", JSON.stringify(history));
-            localStorage.removeItem("beeexy_assessment_draft");
-          }
-        }
-        setAnswers(nextAnswers);
-        setStep(nextStep);
-      } catch (reason) {
-        setError(reason instanceof Error ? reason.message : "Something went wrong. Please try again.");
-      }
-    });
+  async function beginFlow() {
+    if (!selectedPathway || operation) return;
+    try {
+      const session = await start(selectedPathway, mode, selectedPatient);
+      router.push(`/pre-triage/${encodeURIComponent(session.sessionId)}`);
+    } catch {
+      // The provider exposes a privacy-safe error for the screen.
+    }
   }
 
-  function choose(value: Partial<PreTriageAnswers>, nextStep = step + 1, complete = false) {
-    const nextAnswers = { ...answers, ...value };
-    setAnswers(nextAnswers);
-    persist(nextStep, nextAnswers, complete);
-  }
+  if (!hydrated || authStatus === "bootstrapping") return <PreTriageLoading label="Preparing Pre-Triage" />;
 
-  if (step >= 7) return <AssessmentResultView />;
-
-  if (step === 0) {
+  if (active?.mode === "anonymous" && active.sessionId) {
     return (
-      <WelcomeScreen
-        answers={answers}
-        isPending={isPending}
-        error={error}
-        patch={(value) => setAnswers((current) => ({ ...current, ...value }))}
-        continueFlow={() => persist(1, answers)}
-      />
+      <PreTriageFrame title="Pre-Triage" subtitle="Guest session" backHref="/login">
+        <section className="pretriage-panel pretriage-resume" aria-labelledby="resume-title">
+          <span className="pretriage-feature-icon"><Icon name="activity" size={22} /></span>
+          <h2 id="resume-title">Your Pre-Triage is still available</h2>
+          <p>Continue where you left off in this browser, or start again.</p>
+          <Link className="button primary wide" href={resumePath(active)}>Continue Pre-Triage</Link>
+          <button className="button secondary wide" type="button" onClick={abandon}>Start again</button>
+        </section>
+      </PreTriageFrame>
     );
   }
 
   return (
-    <FlowFrame className="pretriage-frame">
-      <main className="flow-shell pretriage-shell">
-        <header className="flow-header">
-          <div className="flow-header-row">
-            <button className="icon-button" aria-label="Previous question" onClick={() => setStep((current) => Math.max(0, current - 1))} disabled={isPending}><Icon name="arrow-left" size={18} /></button>
-            <div><h1>Symptom Check</h1><p>Beeexy AI · Listening</p></div>
-          </div>
-          <div className="progress" aria-label={`Step ${step} of 6`}><span style={{ width: `${Math.round((step / 6) * 100)}%` }} /></div>
-        </header>
-        <section className="pt-chat" aria-live="polite">
-          <ConversationHistory answers={answers} step={step} />
-          <CurrentQuestion answers={answers} step={step} choose={choose} setAnswers={setAnswers} persist={persist} isPending={isPending} />
-          {isPending && <TypingIndicator />}
-          {error && <p className="pt-error" role="alert">{error}</p>}
-        </section>
-      </main>
-    </FlowFrame>
+    <PreTriageFrame title="Start Pre-Triage" subtitle={mode === "anonymous" ? "Private guest session" : "Neutral symptom summary"} backHref={mode === "anonymous" ? "/login" : "/home"}>
+      <section className="pretriage-intro" aria-labelledby="pretriage-start-title">
+        <span className="pretriage-feature-icon"><Icon name="activity" size={22} /></span>
+        <h1 id="pretriage-start-title">What are you feeling today?</h1>
+        <p>Choose one symptom. Beeexy will organize a few details without offering a diagnosis.</p>
+      </section>
+
+      {mode === "authenticated" && patients.length > 0 && (
+        <div className="pretriage-field">
+          <label htmlFor="pretriage-patient">Who is this for?</label>
+          <select id="pretriage-patient" value={resolvedPatientId} onChange={(event) => { setSelectedPatientId(event.target.value); selectActivePatient(event.target.value); }}>
+            {patients.map((patient) => (
+              <option key={patient.profileId} value={patient.profileId}>
+                {displayPatientName(patient)} ({patient.accessType === "Primary" ? "You" : "Managed profile"})
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      <fieldset className="pretriage-fieldset symptom-options">
+        <legend>Choose a primary symptom</legend>
+        {SUPPORTED_PATHWAYS.map((pathway) => (
+          <label className={selectedPathway === pathway.code ? "selected" : ""} key={pathway.code}>
+            <input type="radio" name="pathway" value={pathway.code} checked={selectedPathway === pathway.code} onChange={() => setSelectedPathway(pathway.code)} />
+            <span><Icon name={pathway.icon} size={18} /></span><strong>{pathway.label}</strong>
+            {selectedPathway === pathway.code && <Icon name="check" size={16} />}
+          </label>
+        ))}
+      </fieldset>
+
+      {Boolean(error) && <p className="pretriage-error" role="alert">{preTriageErrorMessage(error)}</p>}
+      <button className="button primary wide pretriage-primary-action" type="button" disabled={!selectedPathway || operation !== null || (mode === "authenticated" && !selectedPatient)} onClick={() => void beginFlow()}>
+        {operation === "starting" ? "Starting..." : "Continue"}
+      </button>
+      <p className="pretriage-neutral-note"><Icon name="shield" size={14} />This flow creates a neutral symptom summary only.</p>
+    </PreTriageFrame>
   );
 }
 
-function WelcomeScreen({ answers, continueFlow, error, isPending, patch }: {
-  answers: Partial<PreTriageAnswers>;
-  continueFlow: () => void;
-  error: string;
-  isPending: boolean;
-  patch: (value: Partial<PreTriageAnswers>) => void;
-}) {
-  const [videoOpen, setVideoOpen] = useState(false);
-  const ready = Boolean(answers.sexAtBirth && answers.ageRange);
-  const ageOptions: Array<[PreTriageAnswers["ageRange"], string]> = [["0_17", "0–17"], ["18_29", "18–29"], ["30_49", "30–49"], ["50_64", "50–64"], ["65_plus", "65+"]];
+export function PreTriageIntakeScreen() {
+  const router = useRouter();
+  const sessionId = useSessionId();
+  const { active, error, hydrated, operation, submit } = usePreTriage();
+  const [feedback, setFeedback] = useState("");
+  const questionHeadingRef = useRef<HTMLHeadingElement>(null);
+  const question = questionForProgression(active?.progression);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    if (!active || active.sessionId !== sessionId) router.replace("/pre-triage/new");
+    else if (active.progression?.state === "READY_TO_COMPLETE" && active.progression.readyToComplete) router.replace(`/pre-triage/${encodeURIComponent(sessionId)}/review`);
+  }, [active, hydrated, router, sessionId]);
+
+  useEffect(() => { questionHeadingRef.current?.focus(); }, [question?.code]);
+
+  async function submitAnswer(request: SubmitPreTriageAnswersRequest) {
+    try {
+      const response = await submit(request);
+      if (response.outcome !== "ACCEPTED" || "naturalLanguage" in request) setFeedback(intakeOutcomeMessage(response.outcome));
+      else setFeedback("");
+      if (response.progression.state === "READY_TO_COMPLETE" && response.progression.readyToComplete) router.push(`/pre-triage/${encodeURIComponent(sessionId)}/review`);
+    } catch {
+      // The provider exposes the error below.
+    }
+  }
+
+  if (!hydrated || !active || active.sessionId !== sessionId) return <PreTriageLoading label="Loading your questions" />;
+  if (!question) return <PreTriageLoading label="Preparing your review" />;
+
   return (
-    <FlowFrame className="pretriage-frame">
-      <main className="flow-shell welcome-shell">
-        <div className="welcome-topbar"><Link href="/" className="icon-button" aria-label="Close symptom check"><Icon name="close" size={17} /></Link><span className="brand-word">Beeexy<span>.</span></span><span className="welcome-step">Private & secure</span></div>
-        <section className="welcome-scroll">
-          <div className="welcome-eyebrow"><span className="pulse-dot" />Symptom Checker</div>
-          <h1>When your body sends a signal, <em>clarity matters.</em></h1>
-          <p className="welcome-intro">Tell Beeexy what you’re feeling. We’ll help you understand what it could mean and what to do next.</p>
-          <button className="welcome-video" onClick={() => setVideoOpen(true)}>
-            <span className="welcome-play"><Icon name="video" size={20} /></span>
-            <span><strong>See how Beeexy helps</strong><small>A 1-minute introduction · Optional</small></span>
-            <Icon name="chevron-right" size={16} />
-          </button>
-
-          <fieldset className="welcome-fieldset"><legend>Sex assigned at birth</legend><p>This helps us ask more relevant questions.</p><div className="welcome-sex-grid">
-            <button className={`welcome-sex${answers.sexAtBirth === "female" ? " selected" : ""}`} onClick={() => patch({ sexAtBirth: "female" })}><span><Icon name="user" size={18} /></span><strong>Female</strong>{answers.sexAtBirth === "female" && <Icon name="check" size={15} />}</button>
-            <button className={`welcome-sex${answers.sexAtBirth === "male" ? " selected" : ""}`} onClick={() => patch({ sexAtBirth: "male" })}><span><Icon name="user" size={18} /></span><strong>Male</strong>{answers.sexAtBirth === "male" && <Icon name="check" size={15} />}</button>
-          </div><button className={`welcome-skip${answers.sexAtBirth === "prefer_not_to_say" ? " selected" : ""}`} onClick={() => patch({ sexAtBirth: "prefer_not_to_say" })}>Prefer not to say</button></fieldset>
-
-          <fieldset className="welcome-fieldset"><legend>Your age range</legend><p>No exact birth date needed.</p><div className="welcome-age-grid">{ageOptions.map(([value, label]) => <button key={value} className={answers.ageRange === value ? "selected" : ""} onClick={() => patch({ ageRange: value })}>{label}</button>)}</div></fieldset>
-          <div className="welcome-trust"><span><Icon name="shield" size={15} /></span><p><strong>Your answers stay private.</strong><br />Beeexy uses them only to structure this assessment.</p></div>
-          {error && <p className="pt-error" role="alert">{error}</p>}
-        </section>
-        <footer className="welcome-footer"><button className="button primary wide" disabled={!ready || isPending} onClick={continueFlow}>{isPending ? "Starting…" : <>Start symptom check <Icon name="chevron-right" size={15} /></>}</button><p>AI-assisted guidance · Not a medical diagnosis</p></footer>
-
-        {videoOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setVideoOpen(false); }}><section className="welcome-modal" role="dialog" aria-modal="true" aria-labelledby="welcome-video-title"><button className="icon-button" aria-label="Close video" onClick={() => setVideoOpen(false)}><Icon name="close" size={17} /></button><div className="video-demo-mark"><span><Icon name="activity" size={25} /></span></div><p className="eyebrow">A clearer first step</p><h2 id="welcome-video-title">From uncertainty to a plan in minutes.</h2><p>Beeexy asks focused questions, organizes what you share, and helps you choose a sensible next step.</p><div className="video-progress"><span /></div><button className="button primary wide" onClick={() => setVideoOpen(false)}>Continue</button></section></div>}
-      </main>
-    </FlowFrame>
+    <PreTriageFrame title="Pre-Triage" subtitle={pathwayLabel(active.pathway)} backHref="/pre-triage/new">
+      <PreTriageProgress progression={active.progression} />
+      <NaturalLanguageForm disabled={operation !== null} onSubmit={(naturalLanguage) => void submitAnswer({ naturalLanguage })} />
+      {feedback && <p className="pretriage-notice" role="status">{feedback}</p>}
+      <section className="pretriage-question" aria-live="polite">
+        <p>Quick question</p>
+        <h2 ref={questionHeadingRef} tabIndex={-1}>{question.prompt}</h2>
+        {question.answerType === "DURATION" && <DurationQuestion disabled={operation !== null} question={question} submit={submitAnswer} />}
+        {question.answerType === "INTEGER_SCALE" && <IntensityQuestion disabled={operation !== null} question={question} submit={submitAnswer} />}
+        {question.answerType === "MULTIPLE_CHOICE" && <AdditionalSymptomsQuestion disabled={operation !== null} pathway={active.pathway} question={question} submit={submitAnswer} />}
+      </section>
+      {operation === "answering" && <p className="pretriage-loading-status" role="status">Saving your answer...</p>}
+      {Boolean(error) && <p className="pretriage-error" role="alert">{preTriageErrorMessage(error)}</p>}
+    </PreTriageFrame>
   );
 }
 
-function ConversationHistory({ answers, step }: { answers: Partial<PreTriageAnswers>; step: number }) {
-  const messages = useMemo(() => {
-    const result: string[] = [];
-    if (step > 1 && answers.symptom) result.push(answers.symptom);
-    if (step > 2 && answers.watchedEducation !== null) result.push(answers.watchedEducation ? "Yes, show me the video" : "No, continue with assessment");
-    if (step > 3 && answers.viewedTimeline !== null) result.push(answers.viewedTimeline ? "Yes, show me the timeline" : "No, continue with assessment");
-    if (step > 4 && answers.duration) result.push(answers.duration);
-    if (step > 5 && answers.painLevel) result.push(`${answers.painLevel} out of 10`);
-    return result.slice(-2);
-  }, [answers, step]);
-  return <>{messages.map((message, index) => <div className="pt-message user" key={`${message}-${index}`}><div className="pt-bubble">{message}</div></div>)}</>;
+function PreTriageProgress({ progression }: { progression?: QuestionnaireProgress }) {
+  const answered = progression?.answeredRequiredFields.length || 0;
+  const percentage = Math.min(100, 20 + Math.round((answered / 3) * 80));
+  return <div className="pretriage-progress" aria-label={`${percentage}% of Pre-Triage completed`}><div className="pretriage-progress-heading"><span>Pre-Triage progress</span><strong>{percentage}%</strong></div><div className="pretriage-progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percentage} aria-label="Pre-Triage completion"><span style={{ width: `${percentage}%` }} /></div></div>;
 }
 
-function CurrentQuestion({ answers, choose, isPending, persist, setAnswers, step }: {
-  answers: Partial<PreTriageAnswers>;
-  choose: (value: Partial<PreTriageAnswers>, nextStep?: number, complete?: boolean) => void;
-  isPending: boolean;
-  persist: (nextStep: number, nextAnswers: Partial<PreTriageAnswers>, complete?: boolean) => void;
-  setAnswers: React.Dispatch<React.SetStateAction<Partial<PreTriageAnswers>>>;
-  step: number;
-}) {
-  if (step === 1) return <Question prompt={<>I understand you’re not feeling well. Let’s figure this out <em>together.</em><br /><br /><em>What</em> brings you here today?</>}><div className="pt-chips">{symptoms.map((symptom) => <button disabled={isPending} key={symptom} onClick={() => choose({ symptom })}>{symptom}</button>)}</div><ChatInput value={answers.symptom || ""} placeholder="Describe another symptom…" disabled={isPending} onChange={(symptom) => setAnswers((current) => ({ ...current, symptom }))} onSend={() => answers.symptom && persist(2, answers)} /></Question>;
-  if (step === 2) return <Question prompt="Would you like to watch a short educational video about common symptom patterns?"><div className="pt-options"><button disabled={isPending} onClick={() => choose({ watchedEducation: true })}><span><Icon name="video" size={17} /></span><strong>Yes, show me the video</strong><Icon name="chevron-right" size={15} /></button><button disabled={isPending} onClick={() => choose({ watchedEducation: false })}><span><Icon name="chevron-right" size={17} /></span><strong>No, continue with assessment</strong><Icon name="chevron-right" size={15} /></button></div></Question>;
-  if (step === 3) return <Question prompt="Would you like to see a visual timeline showing how symptoms like yours may progress?"><div className="pt-options"><button disabled={isPending} onClick={() => choose({ viewedTimeline: true })}><span><Icon name="activity" size={17} /></span><strong>Yes, show me the timeline</strong><Icon name="chevron-right" size={15} /></button><button disabled={isPending} onClick={() => choose({ viewedTimeline: false })}><span><Icon name="chevron-right" size={17} /></span><strong>No, continue with assessment</strong><Icon name="chevron-right" size={15} /></button></div></Question>;
-  if (step === 4) return <Question prompt={<>Now, let’s continue with a few more questions.<br /><br />When did your symptoms <em>start</em>?</>}><div className="pt-options compact">{durations.map((duration) => <button disabled={isPending} key={duration} onClick={() => choose({ duration })}><strong>{duration}</strong><Icon name="chevron-right" size={15} /></button>)}</div></Question>;
-  if (step === 5) return <Question prompt={<>On a scale of <em>1–10</em>, how would you rate your pain level?</>}><div className="pain-card"><div className="pain-value"><strong>{answers.painLevel || 5}</strong><span>/10</span></div><input aria-label="Pain level" type="range" min="1" max="10" value={answers.painLevel || 5} onChange={(event) => setAnswers((current) => ({ ...current, painLevel: Number(event.target.value) }))} /><div className="pain-labels"><span>Mild</span><span>Moderate</span><span>Severe</span></div><button className="button primary wide" disabled={isPending} onClick={() => persist(6, answers)}>Continue</button></div></Question>;
-  return <Question prompt={<>Are you experiencing any <em>other</em> symptoms?</>}><div className="pt-options compact">{otherSymptoms.map((symptom) => <button disabled={isPending} key={symptom} onClick={() => choose({ otherSymptoms: symptom }, 7, true)}><strong>{symptom}</strong><Icon name="chevron-right" size={15} /></button>)}</div><ChatInput value={answers.otherSymptoms || ""} placeholder="Type another symptom…" disabled={isPending} onChange={(value) => setAnswers((current) => ({ ...current, otherSymptoms: value }))} onSend={() => persist(7, answers, true)} /></Question>;
-}
+export function PreTriageReviewScreen() {
+  const router = useRouter();
+  const sessionId = useSessionId();
+  const { active, complete, error, hydrated, operation } = usePreTriage();
 
-function Question({ children, prompt }: { children: React.ReactNode; prompt: React.ReactNode }) {
-  return <><div className="pt-message ai"><span className="pt-ai-avatar">B</span><div className="pt-bubble">{prompt}</div></div>{children}</>;
-}
+  useEffect(() => {
+    if (!hydrated) return;
+    if (!active || active.sessionId !== sessionId) router.replace("/pre-triage/new");
+    else if (active.progression?.state !== "READY_TO_COMPLETE" || !active.progression.readyToComplete) router.replace(`/pre-triage/${encodeURIComponent(sessionId)}`);
+  }, [active, hydrated, router, sessionId]);
 
-function ChatInput({ disabled, onChange, onSend, placeholder, value }: { disabled: boolean; onChange: (value: string) => void; onSend: () => void; placeholder: string; value: string }) {
-  return <div className="pt-input-row"><input value={value} disabled={disabled} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && value.trim().length >= 2) onSend(); }} /><button aria-label="Send answer" disabled={disabled || value.trim().length < 2} onClick={onSend}><Icon name="send" size={16} /></button></div>;
-}
+  async function finish() {
+    try {
+      await complete();
+      router.push(`/pre-triage/${encodeURIComponent(sessionId)}/result`);
+    } catch {
+      // The provider exposes the error below.
+    }
+  }
 
-function TypingIndicator() {
-  return <div className="pt-message ai"><span className="pt-ai-avatar">B</span><div className="typing-indicator"><i /><i /><i /></div></div>;
-}
-
-export function AssessmentResultView() {
-  const result = DEMO_ASSESSMENT_RESULT;
+  if (!hydrated || !active || active.sessionId !== sessionId) return <PreTriageLoading label="Preparing your review" />;
+  const answers = active.acceptedAnswers;
   return (
-    <FlowFrame className="pretriage-frame">
-      <main className="flow-shell result-shell">
-        <header className="flow-header"><div className="flow-header-row"><Link href="/history" className="icon-button" aria-label="Back to History"><Icon name="arrow-left" size={18} /></Link><div><h1>Assessment result</h1><p>Saved to History</p></div></div></header>
-        <section className="flow-body result-body">
-          <span className="urgency-pill"><i />{result.urgencyLabel}</span>
-          <h1>Most likely conditions</h1>
-          <p className="result-intro">Based on the answers you shared, these are the closest educational matches.</p>
-          <div className="condition-list">{result.possibleConditions.map((condition, index) => <article className="condition" key={condition.label}><div className="condition-head"><span><small>#{index + 1}</small>{condition.label}</span><strong>{condition.displayPercentage}%</strong></div><p>{condition.description}</p><div className="condition-bar"><span style={{ width: `${condition.displayPercentage}%` }} /></div></article>)}</div>
-          <div className="ai-disclaimer"><Icon name="info" size={14} />AI-assisted · Not a medical diagnosis</div>
-          <h2 className="result-actions-title">Recommended next steps</h2>
-          <div className="action-list"><Link className="result-action primary" href="/doctors?match=1"><span><Icon name="stethoscope" size={18} /></span><span><strong>Find a doctor for you</strong><small>Specialists matched · Available this week</small></span><Icon name="chevron-right" size={15} /></Link><Link className="result-action" href="/second-opinion?source=pretriage"><span><Icon name="sparkles" size={18} /></span><span><strong>Get AI Second Opinion</strong><small>An independent educational perspective</small></span><Icon name="chevron-right" size={15} /></Link><Link className="result-action compact" href="/history"><span><Icon name="history" size={16} /></span><span><strong>View your History</strong></span><Icon name="chevron-right" size={14} /></Link></div>
-          <p className="result-disclaimer">{result.disclaimer}</p>
-        </section>
-      </main>
-    </FlowFrame>
+    <PreTriageFrame title="Review" subtitle="Before completion" backHref={`/pre-triage/${encodeURIComponent(sessionId)}`}>
+      <section className="pretriage-intro compact"><span className="pretriage-feature-icon"><Icon name="document" size={21} /></span><h1>Review your symptom details</h1><p>This is an informational summary of what the backend accepted.</p></section>
+      <dl className="pretriage-summary">
+        <SummaryItem label="Primary symptom" value={pathwayLabel(active.pathway)} />
+        <SummaryItem label="Duration" value={answers.duration ? `${answers.duration.value} ${unitLabel(answers.duration.unit, answers.duration.value)}` : "Captured from your description"} />
+        <SummaryItem label="Intensity" value={answers.intensity !== undefined ? `${answers.intensity}/10` : "Captured from your description"} />
+        <SummaryItem label="Additional symptoms" value={answers.additionalSymptoms ? (answers.additionalSymptoms.length ? answers.additionalSymptoms.map((item) => ADDITIONAL_LABELS[item]).join(", ") : "None") : "Captured from your description"} />
+      </dl>
+      {Boolean(error) && <p className="pretriage-error" role="alert">{preTriageErrorMessage(error)}</p>}
+      <button className="button primary wide pretriage-primary-action" type="button" disabled={operation !== null} onClick={() => void finish()}>{operation === "completing" ? "Completing..." : "Complete Pre-Triage"}</button>
+    </PreTriageFrame>
   );
 }
+
+export function PreTriageResultScreen() {
+  const router = useRouter();
+  const sessionId = useSessionId();
+  const { active, error, hydrated, loadResult, markPendingClaim, operation } = usePreTriage();
+  const requestedRef = useRef(false);
+  const result = active?.sessionId === sessionId ? active.result : undefined;
+
+  useEffect(() => {
+    if (!hydrated || result || requestedRef.current) return;
+    requestedRef.current = true;
+    void loadResult(sessionId).catch(() => undefined);
+  }, [hydrated, loadResult, result, sessionId]);
+
+  function signInToSave() {
+    try { markPendingClaim(); router.push("/login"); } catch { /* Error is exposed by the provider. */ }
+  }
+
+  if (!hydrated || (!result && operation === "loading-result")) return <PreTriageLoading label="Loading your summary" />;
+  if (!result) return <PreTriageFrame title="Pre-Triage" subtitle="Result unavailable" backHref="/pre-triage/new"><UnavailableState error={error} /></PreTriageFrame>;
+
+  const guest = active?.mode === "anonymous";
+  return (
+    <PreTriageFrame title="Pre-Triage complete" subtitle="Neutral summary" backHref={guest ? "/pre-triage/new" : "/home"}>
+      <ResultSummary result={result} />
+      {Boolean(error) && <p className="pretriage-error" role="alert">{preTriageErrorMessage(error)}</p>}
+      {guest ? <button className="button primary wide pretriage-primary-action" type="button" disabled={operation !== null} onClick={signInToSave}>Sign in to save</button> : <Link className="button primary wide pretriage-primary-action" href="/home">Done</Link>}
+      <p className="pretriage-neutral-note"><Icon name="info" size={14} />This summary has not been clinically reviewed.</p>
+    </PreTriageFrame>
+  );
+}
+
+export function PreTriageClaimScreen() {
+  const sessionId = useSessionId();
+  const { active, claim, claimConfirmation, claimRecovered, error, hydrated, operation } = usePreTriage();
+  const { status: authStatus } = useAuth();
+  const attemptedRef = useRef(false);
+
+  useEffect(() => {
+    if (!hydrated || authStatus !== "authenticated" || attemptedRef.current || claimConfirmation || claimRecovered) return;
+    if (!active || active.sessionId !== sessionId || !active.pendingClaim) return;
+    attemptedRef.current = true;
+    void claim().catch(() => undefined);
+  }, [active, authStatus, claim, claimConfirmation, claimRecovered, hydrated, sessionId]);
+
+  if (!hydrated || authStatus !== "authenticated" || operation === "claiming") return <PreTriageLoading label="Saving your Pre-Triage" />;
+  if (claimConfirmation || claimRecovered) {
+    return <PreTriageFrame title="Pre-Triage saved" subtitle="Beeexy profile" backHref="/home"><section className="pretriage-panel claim-success" aria-live="polite"><span className="pretriage-success-icon"><Icon name="check" size={23} /></span><h1>Saved to your Beeexy profile</h1><p>Pre-Triage saved to your primary Beeexy profile. It has not been clinically reviewed.</p><Link className="button primary wide" href={`/pre-triage/${encodeURIComponent(sessionId)}/result`}>View summary</Link><Link className="button secondary wide" href="/home">Back to Home</Link></section></PreTriageFrame>;
+  }
+  return <PreTriageFrame title="Save Pre-Triage" subtitle="Beeexy profile" backHref="/home"><section className="pretriage-panel claim-error"><span className="pretriage-feature-icon"><Icon name="info" size={22} /></span><h1>We could not save this Pre-Triage</h1><p role="alert">{preTriageErrorMessage(error || new BeeexyApiError(409), "claim")}</p>{active?.pendingClaim ? <button className="button primary wide" type="button" onClick={() => { attemptedRef.current = false; void claim().catch(() => undefined); }}>Try again</button> : <Link className="button primary wide" href="/pre-triage/new">Start a new Pre-Triage</Link>}</section></PreTriageFrame>;
+}
+
+function NaturalLanguageForm({ disabled, onSubmit }: { disabled: boolean; onSubmit: (value: string) => void }) {
+  const id = useId();
+  const [value, setValue] = useState("");
+  function submitForm(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const normalized = value.trim(); if (!normalized) return; onSubmit(normalized); setValue(""); }
+  return <form className="pretriage-language" onSubmit={submitForm}><label htmlFor={id}><Icon name="message" size={16} />Tell Beeexy what you’re feeling <span>Optional</span></label><textarea id={id} maxLength={4000} disabled={disabled} value={value} onChange={(event) => setValue(event.target.value)} placeholder="For example: It started yesterday, feels like a 6 out of 10, and I feel nauseous." /><button className="button secondary" type="submit" disabled={disabled || !value.trim()}><Icon name="send" size={14} />Use this description</button></form>;
+}
+
+type QuestionProps = { disabled: boolean; question: NextQuestion; submit: (request: SubmitPreTriageAnswersRequest) => void };
+
+function DurationQuestion({ disabled, question, submit }: QuestionProps) {
+  const [value, setValue] = useState("");
+  const units = question.allowedUnits.length ? question.allowedUnits : DURATION_UNITS;
+  const [unit, setUnit] = useState<DurationUnit>(units[0]);
+  return <form className="pretriage-answer-form" onSubmit={(event) => { event.preventDefault(); submit({ structured: { duration: { value: Number(value), unit } } }); }}><div className="duration-grid"><div><label htmlFor="duration-value">Duration</label><input id="duration-value" type="number" inputMode="decimal" min="0.01" step="any" required disabled={disabled} value={value} onChange={(event) => setValue(event.target.value)} /></div><div><label htmlFor="duration-unit">Unit</label><select id="duration-unit" disabled={disabled} value={unit} onChange={(event) => setUnit(event.target.value as DurationUnit)}>{units.map((item) => <option value={item} key={item}>{unitLabel(item, 2)}</option>)}</select></div></div><button className="button primary wide" type="submit" disabled={disabled || !value || Number(value) <= 0}>Save and continue</button></form>;
+}
+
+function IntensityQuestion({ disabled, question, submit }: QuestionProps) {
+  const minimum = question.minimum ?? 1;
+  const maximum = question.maximum ?? 10;
+  const options = useMemo(() => Array.from({ length: maximum - minimum + 1 }, (_, index) => minimum + index), [maximum, minimum]);
+  const [value, setValue] = useState<number | null>(null);
+  const selectedValue = value ?? minimum;
+  const progress = ((selectedValue - minimum) / Math.max(maximum - minimum, 1)) * 100;
+  const tone = selectedValue <= 3 ? "low" : selectedValue <= 6 ? "medium" : "high";
+  return <form className="pretriage-answer-form" onSubmit={(event) => { event.preventDefault(); if (value !== null) submit({ structured: { intensity: value } }); }}><fieldset className={`intensity-selector ${tone}`} style={{ "--intensity-progress": `${progress}%` } as React.CSSProperties}><legend>How intense is the pain?</legend><output className="intensity-value" htmlFor="intensity-range">{selectedValue}/10</output><div className="intensity-scale"><span>No pain</span><span>Severe pain</span></div><input id="intensity-range" name="intensity" type="range" min={minimum} max={maximum} step="1" value={selectedValue} disabled={disabled} onChange={(event) => setValue(Number(event.target.value))} aria-valuetext={`${selectedValue} out of ${maximum}, ${tone} intensity`} list="intensity-values" /><datalist id="intensity-values">{options.map((option) => <option value={option} key={option}>{option}</option>)}</datalist><div className="intensity-ticks" aria-hidden="true">{options.map((option) => <span className={selectedValue === option ? "selected" : ""} key={option}>{option}</span>)}</div></fieldset><button className={`button wide intensity-confirm ${tone}`} type="submit" disabled={disabled || value === null}><Icon name="check" size={15} />Confirm — Level {value ?? "—"}</button></form>;
+}
+
+function AdditionalSymptomsQuestion({ disabled, pathway, question, submit }: QuestionProps & { pathway: PreTriagePathway }) {
+  const allowed = allowedAdditionalSymptoms(pathway, question.allowedValues);
+  const [selected, setSelected] = useState<AdditionalSymptom[]>([]);
+  return <form className="pretriage-answer-form" onSubmit={(event) => { event.preventDefault(); submit({ structured: { additionalSymptoms: selected } }); }}><fieldset className="additional-selector"><legend>Select all that apply. You can continue with none.</legend>{allowed.map((symptom) => <label className={selected.includes(symptom) ? "selected" : ""} key={symptom}><input type="checkbox" checked={selected.includes(symptom)} disabled={disabled} onChange={() => setSelected((current) => current.includes(symptom) ? current.filter((item) => item !== symptom) : [...current, symptom])} /><span>{ADDITIONAL_LABELS[symptom]}</span><Icon name="check" size={15} /></label>)}</fieldset><button className="button primary wide" type="submit" disabled={disabled}>Save and continue</button></form>;
+}
+
+export function ResultSummary({ result }: { result: NeutralPreTriageResult }) {
+  return <section className="pretriage-result" aria-labelledby="result-title"><span className="pretriage-success-icon"><Icon name="check" size={23} /></span><p>Pre-Triage complete</p><h1 id="result-title">{result.primarySymptom.display}</h1><p className="result-completed">Completed {formatDate(result.completedAt)}</p><dl className="pretriage-summary"><SummaryItem label="Duration" value={`${result.duration.value} ${unitLabel(result.duration.unit, result.duration.value)}`} /><SummaryItem label="Intensity" value={`${result.intensity}/10`} /><SummaryItem label="Additional symptoms" value={result.additionalSymptoms.length ? result.additionalSymptoms.map((item) => ADDITIONAL_LABELS[item]).join(", ") : "None"} /></dl></section>;
+}
+
+function SummaryItem({ label, value }: { label: string; value: string }) { return <div><dt>{label}</dt><dd>{value}</dd></div>; }
+
+function PreTriageFrame({ backHref, children, subtitle, title }: { backHref: string; children: React.ReactNode; subtitle: string; title: string }) {
+  return <FlowFrame className="phase4-pretriage-frame"><main className="flow-shell phase4-pretriage-shell"><header className="flow-header"><div className="flow-header-row"><Link href={backHref} className="icon-button" aria-label="Go back"><Icon name="arrow-left" size={18} /></Link><div><h1>{title}</h1><p>{subtitle}</p></div></div></header><div className="phase4-pretriage-body">{children}</div></main></FlowFrame>;
+}
+
+function PreTriageLoading({ label }: { label: string }) { return <FlowFrame className="phase4-pretriage-frame"><main className="flow-shell phase4-pretriage-shell"><div className="pretriage-loading" role="status"><span /><span /><span /><p>{label}</p></div></main></FlowFrame>; }
+function UnavailableState({ error }: { error: unknown }) { return <section className="pretriage-panel claim-error"><span className="pretriage-feature-icon"><Icon name="info" size={22} /></span><h1>This Pre-Triage is unavailable</h1><p role="alert">{preTriageErrorMessage(error || new BeeexyApiError(404))}</p><Link className="button primary wide" href="/pre-triage/new">Start a new Pre-Triage</Link></section>; }
+function useSessionId() { return useParams<{ sessionId: string }>().sessionId; }
+function pathwayLabel(pathway: PreTriagePathway) { return SUPPORTED_PATHWAYS.find((item) => item.code === pathway)?.label || pathway; }
+function unitLabel(unit: DurationUnit, value: number) { const label = unit.toLowerCase(); return value === 1 ? label.slice(0, -1) : label; }
+function isAdditionalSymptom(value: string): value is AdditionalSymptom { return value === "NAUSEA" || value === "DIARRHEA" || value === "FEVER"; }
+export function allowedAdditionalSymptoms(pathway: PreTriagePathway, allowedValues: string[]) { return allowedValues.filter(isAdditionalSymptom).filter((value) => !(pathway === "FEVER" && value === "FEVER")); }
+export function questionForProgression(progression?: QuestionnaireProgress) { return progression ? progression.nextQuestion : INITIAL_DURATION_QUESTION; }
+function resumePath(active: { sessionId: string; progression?: { readyToComplete: boolean }; result?: unknown; pendingClaim: boolean }) { const base = `/pre-triage/${encodeURIComponent(active.sessionId)}`; if (active.pendingClaim) return `${base}/claim`; if (active.result) return `${base}/result`; if (active.progression?.readyToComplete) return `${base}/review`; return base; }
+function formatDate(value: string) { return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }

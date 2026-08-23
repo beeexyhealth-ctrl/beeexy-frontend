@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { preTriageAnswersSchema, bookingSchema, dependentSchema } from "@/lib/validation/schemas";
-import { DEMO_ASSESSMENT_RESULT } from "@/features/pre-triage/demo-result";
 
 describe("Beeexy domain validation", () => {
   it("accepts a complete pre-triage intake", () => {
@@ -12,9 +11,9 @@ describe("Beeexy domain validation", () => {
     expect(() => preTriageAnswersSchema.parse({ symptom: "Headache", sexAtBirth: "female", ageRange: "30_49", watchedEducation: false, viewedTimeline: false, duration: "Today", painLevel: 11, otherSymptoms: null })).toThrow();
   });
 
-  it("marks the migrated result as a demo fixture", () => {
-    expect(DEMO_ASSESSMENT_RESULT.source).toBe("demo_fixture");
-    expect(DEMO_ASSESSMENT_RESULT.disclaimer).toMatch(/Demo result only/);
+  it("does not manufacture a clinical result during frontend validation", () => {
+    const parsed = preTriageAnswersSchema.parse({ symptom: "Fever", sexAtBirth: "male", ageRange: "18_29", watchedEducation: false, viewedTimeline: false, duration: "Today", painLevel: 4, otherSymptoms: null });
+    expect(parsed).not.toHaveProperty("result");
   });
 
   it("validates booking and dependent identifiers", () => {

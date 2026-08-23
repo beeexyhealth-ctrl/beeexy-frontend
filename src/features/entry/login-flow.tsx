@@ -7,15 +7,21 @@ import { AuthenticationBootstrapError, useAuth } from "@/features/auth/auth-prov
 import { GoogleSignInButton } from "@/features/auth/google-sign-in-button";
 import { challengeErrorMessage, googleErrorMessage, verificationErrorMessage } from "@/features/auth/login-error-messages";
 import { BeeexyBrand } from "./beeexy-brand";
+import { usePreTriage } from "@/features/pre-triage/pre-triage-provider";
 
 type AuthStage = "email" | "otp" | "transition";
 type PendingAction = "challenge" | "verify" | "resend" | "google" | "bootstrap" | null;
+
+export function guestPreTriageRoute() {
+  return "/pre-triage/new";
+}
 
 export function LoginFlow() {
   const router = useRouter();
   const emailId = useId();
   const otpId = useId();
   const { authenticateWithGoogle, requestEmailChallenge, resendEmailChallenge, retryBootstrap, verifyEmail } = useAuth();
+  const { pendingClaimRoute } = usePreTriage();
   const [stage, setStage] = useState<AuthStage>("email");
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
@@ -57,7 +63,7 @@ export function LoginFlow() {
     try {
       await verifyEmail(email, otp);
       setStage("transition");
-      router.replace("/home");
+      router.replace(pendingClaimRoute || "/home");
     } catch (error) {
       if (error instanceof AuthenticationBootstrapError) {
         setStage("transition");
@@ -100,7 +106,7 @@ export function LoginFlow() {
     try {
       await authenticateWithGoogle(credential);
       setStage("transition");
-      router.replace("/home");
+      router.replace(pendingClaimRoute || "/home");
     } catch (error) {
       if (error instanceof AuthenticationBootstrapError) {
         setStage("transition");
@@ -119,7 +125,7 @@ export function LoginFlow() {
     setFeedback("");
     try {
       await retryBootstrap();
-      router.replace("/home");
+      router.replace(pendingClaimRoute || "/home");
     } catch {
       setFeedback("Beeexy still couldn’t load your account. Check the backend connection and try again.", true);
     } finally {
@@ -152,6 +158,8 @@ export function LoginFlow() {
 
               <div className="login-divider"><span>or</span></div>
               <GoogleSignInButton disabled={pending !== null} pending={pending === "google"} onCredential={continueWithGoogle} onUnavailable={() => setFeedback("Google sign-in is unavailable right now. You can continue with email.", true)} />
+              <div className="login-divider guest-divider"><span>or continue without an account</span></div>
+              <button className="entry-guest-button" type="button" disabled={pending !== null} onClick={() => router.push(guestPreTriageRoute())}><Icon name="activity" size={17} />Continue as guest</button>
               {message && <p className="login-message" role={messageIsError ? "alert" : "status"}>{message}</p>}
             </div>
           )}

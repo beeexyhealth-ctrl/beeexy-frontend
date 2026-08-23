@@ -7,6 +7,7 @@ import { Icon, type IconName } from "@/components/ui/icon";
 type HealthView = "personal" | "history" | "insurance" | "notes" | null;
 
 const sections: Array<{ description: string; icon: IconName; title: string; view?: Exclude<HealthView, null>; href?: string }> = [
+  { title: "Start Pre-Triage", description: "Create a neutral summary of your symptoms", icon: "activity", href: "/pre-triage/new" },
   { title: "Personal Information", description: "Contact, identity and emergency information", icon: "user", view: "personal" },
   { title: "Medical History", description: "Conditions, medications, allergies and surgeries", icon: "activity", view: "history" },
   { title: "Insurance", description: "Medical, dental and vision plans", icon: "shield", view: "insurance" },

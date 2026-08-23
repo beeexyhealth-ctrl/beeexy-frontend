@@ -23,8 +23,8 @@ const assistants: Array<{
   {
     href: "/pre-triage/new",
     icon: "activity",
-    title: "Symptom Checker",
-    description: "Understand what your symptoms could mean and what to do next.",
+    title: "Pre-Triage",
+    description: "Organize your symptom, duration, intensity and additional symptoms.",
     action: "Start pre-triage",
     badge: "Active",
     className: "primary-tool",
@@ -104,7 +104,7 @@ export function HomeDashboard({ configured, email, name, signedIn }: HomeDashboa
         </div>
       </header>
 
-      <p className="hero-copy">Hi, I’m here to help you understand your symptoms, then connect with a doctor if needed in under minutes.</p>
+      <p className="hero-copy">I’m here to help you organize health details and prepare for care.</p>
 
       {!signedIn && (
         <Link href="/login" className="unlock-banner">

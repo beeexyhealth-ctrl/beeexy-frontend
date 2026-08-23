@@ -1,0 +1,96 @@
+import { BeeexyApiClient, type BeeexyApiResponse } from "./api-client";
+import { beeexyApiClient } from "./auth-api";
+import type {
+  ClaimAnonymousPreTriageResponse,
+  CompletePreTriageResponse,
+  PreTriageAnswerResponse,
+  PreTriageSessionStartResponse,
+  StartPreTriageRequest,
+  SubmitPreTriageAnswersRequest,
+} from "./contracts";
+
+export const PRE_TRIAGE_CAPABILITY_HEADER = "X-Pre-Triage-Capability";
+
+export type PreTriageAccess =
+  | { mode: "authenticated" }
+  | { mode: "anonymous"; capability: string };
+
+export class BeeexyPhase4Api {
+  constructor(private readonly client: BeeexyApiClient) {}
+
+  startPreTriage(request: StartPreTriageRequest, mode: PreTriageAccess["mode"]) {
+    if (mode === "anonymous") {
+      return this.client.requestPublic<PreTriageSessionStartResponse>("/api/v1/pre-triage/sessions", {
+        method: "POST",
+        body: request,
+        expectedStatus: 201,
+      });
+    }
+    return this.client.requestAuthenticated<PreTriageSessionStartResponse>("/api/v1/pre-triage/sessions", {
+      method: "POST",
+      body: request,
+      expectedStatus: 201,
+    });
+  }
+
+  submitPreTriageAnswers(sessionId: string, request: SubmitPreTriageAnswersRequest, access: PreTriageAccess) {
+    const path = sessionPath(sessionId, "answers");
+    if (access.mode === "anonymous") {
+      return this.client.requestPublic<PreTriageAnswerResponse>(path, {
+        method: "POST",
+        body: request,
+        headers: capabilityHeaders(access.capability),
+        expectedStatus: 200,
+      });
+    }
+    return this.client.requestAuthenticated<PreTriageAnswerResponse>(path, {
+      method: "POST",
+      body: request,
+      expectedStatus: 200,
+    });
+  }
+
+  completePreTriage(sessionId: string, access: PreTriageAccess): Promise<BeeexyApiResponse<CompletePreTriageResponse>> {
+    const path = sessionPath(sessionId, "complete");
+    if (access.mode === "anonymous") {
+      return this.client.requestPublicResponse<CompletePreTriageResponse>(path, {
+        method: "POST",
+        headers: capabilityHeaders(access.capability),
+        expectedStatus: [200, 201],
+      });
+    }
+    return this.client.requestAuthenticatedResponse<CompletePreTriageResponse>(path, {
+      method: "POST",
+      expectedStatus: [200, 201],
+    });
+  }
+
+  getPreTriageResult(sessionId: string, access: PreTriageAccess) {
+    const path = sessionPath(sessionId, "result");
+    if (access.mode === "anonymous") {
+      return this.client.requestPublic<CompletePreTriageResponse>(path, {
+        headers: capabilityHeaders(access.capability),
+        expectedStatus: 200,
+      });
+    }
+    return this.client.requestAuthenticated<CompletePreTriageResponse>(path, { expectedStatus: 200 });
+  }
+
+  claimAnonymousPreTriage(sessionId: string, anonymousCapability: string) {
+    return this.client.requestAuthenticated<ClaimAnonymousPreTriageResponse>(sessionPath(sessionId, "claim"), {
+      method: "POST",
+      headers: capabilityHeaders(anonymousCapability),
+      expectedStatus: 200,
+    });
+  }
+}
+
+function capabilityHeaders(capability: string) {
+  return { [PRE_TRIAGE_CAPABILITY_HEADER]: capability };
+}
+
+function sessionPath(sessionId: string, action: "answers" | "complete" | "result" | "claim") {
+  return `/api/v1/pre-triage/sessions/${encodeURIComponent(sessionId)}/${action}`;
+}
+
+export const beeexyPhase4Api = new BeeexyPhase4Api(beeexyApiClient);

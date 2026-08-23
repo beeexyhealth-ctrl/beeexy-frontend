@@ -1,6 +1,8 @@
-import { PreTriageFlow } from "@/features/pre-triage/pre-triage-flow";
+import type { Metadata } from "next";
+import { PreTriageStartScreen } from "@/features/pre-triage/pre-triage-flow";
 
-export default async function NewPreTriagePage({ searchParams }: { searchParams: Promise<{ dependentId?: string }> }) {
-  const { dependentId } = await searchParams;
-  return <PreTriageFlow dependentId={dependentId || null} />;
+export const metadata: Metadata = { title: "Start Pre-Triage" };
+
+export default function NewPreTriagePage() {
+  return <PreTriageStartScreen />;
 }

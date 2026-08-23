@@ -6,15 +6,29 @@ import { BeeexyBrand } from "@/features/entry/beeexy-brand";
 import { EntryLoading } from "@/features/entry/entry-loading";
 import { usePatients } from "@/features/my-circle/patient-provider";
 import { isPrimaryProfileComplete } from "@/features/my-circle/patient-state";
+import { usePreTriage } from "@/features/pre-triage/pre-triage-provider";
 import { useAuth } from "./auth-provider";
 
-const PUBLIC_ROUTES = new Set(["/", "/login", "/onboarding", "/sign-in"]);
+const PUBLIC_ENTRY_ROUTES = new Set(["/", "/login", "/onboarding", "/sign-in"]);
 const INITIAL_CARE_ROUTES = new Set(["/care-choice", "/my-health/circle/add"]);
+
+export function isGuestPreTriageRoute(pathname: string) {
+  return pathname.startsWith("/pre-triage/") && !pathname.endsWith("/claim");
+}
+
+export function isPublicRoute(pathname: string) {
+  return PUBLIC_ENTRY_ROUTES.has(pathname) || isGuestPreTriageRoute(pathname);
+}
+
+export function postAuthDestination(pendingClaimRoute: string | null) {
+  return pendingClaimRoute || "/home";
+}
 
 export function AuthRouteBoundary({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { logout, retryBootstrap, status } = useAuth();
+  const { pendingClaimRoute } = usePreTriage();
   const {
     activePatient,
     bootstrapStatus: patientStatus,
@@ -22,7 +36,8 @@ export function AuthRouteBoundary({ children }: { children: React.ReactNode }) {
     primaryPatient,
     retryBootstrap: retryPatientBootstrap,
   } = usePatients();
-  const isPublic = PUBLIC_ROUTES.has(pathname);
+  const isPublicEntry = PUBLIC_ENTRY_ROUTES.has(pathname);
+  const isPublic = isPublicRoute(pathname);
   const profileComplete = primaryPatient ? isPrimaryProfileComplete(primaryPatient) : false;
 
   useEffect(() => {
@@ -37,10 +52,10 @@ export function AuthRouteBoundary({ children }: { children: React.ReactNode }) {
       router.replace("/care-choice");
       return;
     }
-    if (careChoiceComplete && (isPublic || pathname === "/complete-profile" || pathname === "/care-choice")) {
-      router.replace("/home");
+    if (careChoiceComplete && (isPublicEntry || pathname === "/complete-profile" || pathname === "/care-choice")) {
+      router.replace(postAuthDestination(pendingClaimRoute));
     }
-  }, [careChoiceComplete, isPublic, pathname, patientStatus, profileComplete, router, status]);
+  }, [careChoiceComplete, isPublic, isPublicEntry, pathname, patientStatus, pendingClaimRoute, profileComplete, router, status]);
 
   if (status === "bootstrapping" || status === "authenticating" || status === "signing-out") return <EntryLoading />;
   if (status === "unauthenticated" && !isPublic) return <EntryLoading />;
@@ -48,7 +63,7 @@ export function AuthRouteBoundary({ children }: { children: React.ReactNode }) {
   if (status === "authenticated" && patientStatus === "ready") {
     if (!profileComplete && pathname !== "/complete-profile") return <EntryLoading />;
     if (profileComplete && !careChoiceComplete && !INITIAL_CARE_ROUTES.has(pathname)) return <EntryLoading />;
-    if (profileComplete && careChoiceComplete && (isPublic || pathname === "/complete-profile" || pathname === "/care-choice")) return <EntryLoading />;
+    if (profileComplete && careChoiceComplete && (isPublicEntry || pathname === "/complete-profile" || pathname === "/care-choice")) return <EntryLoading />;
     if (profileComplete && !activePatient && !INITIAL_CARE_ROUTES.has(pathname)) return <EntryLoading />;
   }
 

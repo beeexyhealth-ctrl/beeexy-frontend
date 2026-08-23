@@ -163,3 +163,140 @@ export interface UpdatePatientRequest {
   sexAssignedAtBirth?: SexAssignedAtBirth;
   state?: string;
 }
+
+export type Uuid = string;
+export type IsoTimestamp = string;
+
+export type PreTriagePathway = "HEADACHE" | "ABDOMINAL_PAIN" | "FEVER";
+export type AdditionalSymptom = "NAUSEA" | "DIARRHEA" | "FEVER";
+export type DurationUnit = "MINUTES" | "HOURS" | "DAYS" | "WEEKS" | "MONTHS";
+export type RequiredAnswerCode = "DURATION" | "INTENSITY" | "ADDITIONAL_SYMPTOMS";
+export type NextQuestionAnswerType = "DURATION" | "INTEGER_SCALE" | "MULTIPLE_CHOICE";
+
+export interface ClinicalDefinitionReference {
+  code: string;
+  version: string;
+}
+
+export interface ClinicalContentStatus {
+  source: "PRODUCT_DEMO_DEFINED";
+  reviewStatus: "NOT_APPLICABLE";
+  clinicalApproval: "NOT_CLINICALLY_APPROVED";
+}
+
+export interface StartPreTriageRequest {
+  pathway: PreTriagePathway;
+  patientId?: Uuid;
+}
+
+interface PreTriageSessionStartCommon {
+  sessionId: Uuid;
+  pathway: PreTriagePathway;
+  status: "Active";
+  expiresAt: IsoTimestamp;
+  questionnaire: ClinicalDefinitionReference;
+  ruleSet: ClinicalDefinitionReference;
+  clinicalContent: ClinicalContentStatus;
+}
+
+export type PreTriageSessionStartResponse =
+  | (PreTriageSessionStartCommon & { patientId?: never; anonymousCapability: string })
+  | (PreTriageSessionStartCommon & { patientId: Uuid; anonymousCapability?: never });
+
+export interface DurationAnswer {
+  value: number;
+  unit: DurationUnit;
+}
+
+export interface StructuredPreTriageAnswers {
+  duration?: DurationAnswer;
+  intensity?: number;
+  additionalSymptoms?: AdditionalSymptom[];
+}
+
+export type SubmitPreTriageAnswersRequest =
+  | { questionnaireVersion?: string; structured: StructuredPreTriageAnswers; naturalLanguage?: never }
+  | { questionnaireVersion?: string; structured?: never; naturalLanguage: string };
+
+export interface NextQuestion {
+  code: RequiredAnswerCode;
+  prompt: string;
+  answerType: NextQuestionAnswerType;
+  allowedValues: string[];
+  allowedUnits: DurationUnit[];
+  minimum: number | null;
+  maximum: number | null;
+}
+
+export type QuestionnaireProgressState = "IN_PROGRESS" | "READY_TO_COMPLETE";
+
+export interface QuestionnaireProgress {
+  state: QuestionnaireProgressState;
+  answeredRequiredFields: RequiredAnswerCode[];
+  missingRequiredFields: RequiredAnswerCode[];
+  nextQuestion?: NextQuestion;
+  readyToComplete: boolean;
+}
+
+export type TriageIntakeOutcome =
+  | "ACCEPTED"
+  | "CLARIFICATION_REQUIRED"
+  | "SAFETY_RESTRICTED"
+  | "UNSUPPORTED"
+  | "PROVIDER_UNAVAILABLE";
+
+export type IntakeClarificationCode =
+  | "CLARIFICATION_REQUIRED"
+  | "SAFETY_RESTRICTED"
+  | "UNSUPPORTED_INPUT"
+  | "INTERPRETATION_UNAVAILABLE"
+  | "INVALID_INTERPRETATION";
+
+export type ClinicalIntentClassification =
+  | "PRE_TRIAGE_INPUT"
+  | "OUT_OF_SCOPE"
+  | "PRESCRIPTION_REQUEST"
+  | "PROHIBITED_MEDICAL_ADVICE"
+  | "POTENTIAL_PROMPT_INJECTION"
+  | "UNSUPPORTED_CLINICAL_REQUEST"
+  | "AMBIGUOUS";
+
+export interface IntakeClarification {
+  code: IntakeClarificationCode;
+  classification?: ClinicalIntentClassification;
+}
+
+export interface PreTriageAnswerResponse {
+  sessionId: Uuid;
+  pathway: PreTriagePathway;
+  questionnaireVersion: string;
+  outcome: TriageIntakeOutcome;
+  acceptedAnswers: RequiredAnswerCode[];
+  progression: QuestionnaireProgress;
+  clarification?: IntakeClarification;
+}
+
+export interface NeutralPreTriageResult {
+  sessionId: Uuid;
+  episodeId: Uuid;
+  primarySymptom: {
+    code: PreTriagePathway;
+    display: "Headache" | "Stomach pain" | "Fever";
+  };
+  duration: DurationAnswer;
+  intensity: number;
+  additionalSymptoms: AdditionalSymptom[];
+  completedAt: IsoTimestamp;
+  questionnaire: ClinicalDefinitionReference;
+  package: ClinicalDefinitionReference;
+  clinicalContent: ClinicalContentStatus;
+}
+
+export type CompletePreTriageResponse = NeutralPreTriageResult;
+
+export interface ClaimAnonymousPreTriageResponse {
+  sessionId: Uuid;
+  episodeId: Uuid;
+  patientId: Uuid;
+  claimedAt: IsoTimestamp;
+}
