@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/features/auth/auth-provider";
+import { notifyClinicalHistoryChanged } from "@/features/clinical-history/clinical-history-refresh";
 import { usePatients } from "@/features/my-circle/patient-provider";
 import type {
   AccessiblePatient,
@@ -63,7 +64,7 @@ const PreTriageContext = createContext<PreTriageContextValue | null>(null);
 
 export function PreTriageProvider({ children }: { children: React.ReactNode }) {
   const { status: authStatus } = useAuth();
-  const { refreshPatients } = usePatients();
+  const { activePatient, primaryPatient, refreshPatients } = usePatients();
   const [active, setActive] = useState<ActivePreTriageInternal | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [operation, setOperation] = useState<PreTriageOperation>(null);
@@ -195,6 +196,9 @@ export function PreTriageProvider({ children }: { children: React.ReactNode }) {
     try {
       const response = await beeexyPhase4Api.completePreTriage(current.sessionId, accessFor(current));
       persist({ ...current, result: response.data });
+      if (current.mode === "authenticated") {
+        notifyClinicalHistoryChanged(current.patientId || activePatient?.profileId || primaryPatient?.profileId);
+      }
       return response.data;
     } catch (caught) {
       await handleFailure(caught, current);
@@ -202,7 +206,7 @@ export function PreTriageProvider({ children }: { children: React.ReactNode }) {
     } finally {
       finish();
     }
-  }, [begin, finish, handleFailure, persist, requireCurrent]);
+  }, [activePatient?.profileId, begin, finish, handleFailure, persist, primaryPatient?.profileId, requireCurrent]);
 
   const loadResult = useCallback(async (sessionId: string) => {
     const current = active?.sessionId === sessionId ? requireCurrent() : null;
@@ -258,6 +262,7 @@ export function PreTriageProvider({ children }: { children: React.ReactNode }) {
       setClaimConfirmation(response);
       setClaimRecovered(false);
       setActive({ ...claimedPreTriageState(current, response), anonymousCapability: undefined });
+      notifyClinicalHistoryChanged(response.patientId);
       return response;
     } catch (caught) {
       if (shouldReconcileClaim(caught)) {
@@ -268,6 +273,7 @@ export function PreTriageProvider({ children }: { children: React.ReactNode }) {
           setClaimRecovered(true);
           setError(null);
           setActive({ ...current, mode: "authenticated", pendingClaim: false, anonymousCapability: undefined, result });
+          notifyClinicalHistoryChanged(primaryPatient?.profileId);
           return null;
         } catch {
           // Authenticated GET did not confirm ownership; preserve the original safe error.
@@ -284,7 +290,7 @@ export function PreTriageProvider({ children }: { children: React.ReactNode }) {
     } finally {
       finish();
     }
-  }, [authStatus, begin, finish, requireCurrent]);
+  }, [authStatus, begin, finish, primaryPatient?.profileId, requireCurrent]);
 
   const pendingClaimRoute = active?.mode === "anonymous" && active.pendingClaim
     ? `/pre-triage/${encodeURIComponent(active.sessionId)}/claim`

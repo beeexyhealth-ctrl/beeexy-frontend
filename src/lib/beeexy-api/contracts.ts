@@ -57,6 +57,7 @@ export interface Preferences {
 }
 
 export interface ProblemDetails {
+  type?: string;
   status?: number;
   title?: string;
   detail?: string;
@@ -299,4 +300,66 @@ export interface ClaimAnonymousPreTriageResponse {
   episodeId: Uuid;
   patientId: Uuid;
   claimedAt: IsoTimestamp;
+}
+
+export type ClinicalHistoryEventType = "COMPLETED_PRE_TRIAGE";
+export type ClinicalHistorySourceType = "PRE_TRIAGE_EPISODE";
+export type ClinicalHistoryAuthorType = "BEEEXY_ACCOUNT";
+
+export interface ClinicalHistorySource {
+  type: ClinicalHistorySourceType;
+  id: Uuid;
+  questionnaireVersionId: Uuid;
+  clinicalRuleSetVersionId: Uuid;
+}
+
+export interface ClinicalHistoryProvenance {
+  sourceType: ClinicalHistorySourceType;
+  sourceId: Uuid;
+  questionnaireVersionId: Uuid;
+  clinicalRuleSetVersionId: Uuid;
+}
+
+export interface ClinicalHistoryItem {
+  eventId: Uuid;
+  eventType: ClinicalHistoryEventType;
+  occurredAt: IsoTimestamp;
+  recordedAt: IsoTimestamp;
+  source: ClinicalHistorySource;
+}
+
+export interface ClinicalHistoryPage {
+  items: ClinicalHistoryItem[];
+  nextCursor: string | null;
+}
+
+export interface ClinicalHistoryAmendmentAuthor {
+  type: ClinicalHistoryAuthorType;
+  beeexyId: string | null;
+}
+
+export interface ClinicalHistoryAmendment {
+  amendmentId: Uuid;
+  reason: string;
+  author: ClinicalHistoryAmendmentAuthor;
+  createdAt: IsoTimestamp;
+  provenance: ClinicalHistoryProvenance;
+}
+
+export interface ClinicalHistoryEventDetail extends ClinicalHistoryItem {
+  provenance: ClinicalHistoryProvenance;
+  amendments: ClinicalHistoryAmendment[];
+}
+
+export interface CreatePreTriageAmendmentRequest {
+  idempotencyKey: Uuid;
+  reason: string;
+}
+
+export type CreatePreTriageAmendmentResponse = ClinicalHistoryAmendment;
+
+export interface ClinicalHistoryQuery {
+  cursor?: string;
+  pageSize?: number;
+  eventType?: ClinicalHistoryEventType;
 }

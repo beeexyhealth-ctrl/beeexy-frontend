@@ -10,6 +10,7 @@ type RequestOptions = {
   expectedStatus?: number | number[];
   headers?: HeadersInit;
   method?: "GET" | "POST" | "PATCH" | "DELETE";
+  signal?: AbortSignal;
 };
 
 export type BeeexyApiResponse<T> = {
@@ -112,8 +113,10 @@ export class BeeexyApiClient {
         method: options.method || "GET",
         headers,
         body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        signal: options.signal,
       });
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") throw error;
       throw new BeeexyNetworkError();
     }
   }
