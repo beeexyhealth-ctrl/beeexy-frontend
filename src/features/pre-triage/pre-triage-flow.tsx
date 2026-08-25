@@ -15,6 +15,7 @@ import type {
   NeutralPreTriageResult,
   PreTriagePathway,
   QuestionnaireProgress,
+  StructuredPreTriageAnswers,
   SubmitPreTriageAnswersRequest,
 } from "@/lib/beeexy-api/contracts";
 import { BeeexyApiError } from "@/lib/beeexy-api/problem-details";
@@ -193,19 +194,24 @@ export function PreTriageReviewScreen() {
   }
 
   if (!hydrated || !active || active.sessionId !== sessionId) return <PreTriageLoading label="Preparing your review" />;
-  const answers = active.acceptedAnswers;
   return (
     <PreTriageFrame title="Review" subtitle="Before completion" backHref={`/pre-triage/${encodeURIComponent(sessionId)}`}>
       <section className="pretriage-intro compact"><span className="pretriage-feature-icon"><Icon name="document" size={21} /></span><h1>Review your symptom details</h1><p>This is an informational summary of what the backend accepted.</p></section>
-      <dl className="pretriage-summary">
-        <SummaryItem label="Primary symptom" value={pathwayLabel(active.pathway)} />
-        <SummaryItem label="Duration" value={answers.duration ? `${answers.duration.value} ${unitLabel(answers.duration.unit, answers.duration.value)}` : "Captured from your description"} />
-        <SummaryItem label="Intensity" value={answers.intensity !== undefined ? `${answers.intensity}/10` : "Captured from your description"} />
-        <SummaryItem label="Additional symptoms" value={answers.additionalSymptoms ? (answers.additionalSymptoms.length ? answers.additionalSymptoms.map((item) => ADDITIONAL_LABELS[item]).join(", ") : "None") : "Captured from your description"} />
-      </dl>
+      <PreTriageReviewSummary pathway={active.pathway} answers={active.acceptedAnswers} />
       {Boolean(error) && <p className="pretriage-error" role="alert">{preTriageErrorMessage(error)}</p>}
       <button className="button primary wide pretriage-primary-action" type="button" disabled={operation !== null} onClick={() => void finish()}>{operation === "completing" ? "Completing..." : "Complete Pre-Triage"}</button>
     </PreTriageFrame>
+  );
+}
+
+export function PreTriageReviewSummary({ answers, pathway }: { answers: StructuredPreTriageAnswers; pathway: PreTriagePathway }) {
+  return (
+    <dl className="pretriage-summary">
+      <SummaryItem label="Primary symptom" value={pathwayLabel(pathway)} />
+      <SummaryItem label="Duration" value={answers.duration ? `${answers.duration.value} ${unitLabel(answers.duration.unit, answers.duration.value)}` : "Captured from your description"} />
+      <SummaryItem label="Intensity" value={answers.intensity !== undefined ? `${answers.intensity} / 10` : "Captured from your description"} />
+      <SummaryItem label="Additional symptoms" value={answers.additionalSymptoms ? (answers.additionalSymptoms.length ? answers.additionalSymptoms.map((item) => ADDITIONAL_LABELS[item]).join(", ") : "None") : "Captured from your description"} />
+    </dl>
   );
 }
 

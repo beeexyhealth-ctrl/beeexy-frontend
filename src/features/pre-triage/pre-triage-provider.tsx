@@ -174,9 +174,13 @@ export function PreTriageProvider({ children }: { children: React.ReactNode }) {
         ...request,
         questionnaireVersion: current.questionnaireVersion,
       }, accessFor(current));
-      const acceptedAnswers = "structured" in request && request.structured
-        ? mergeAcceptedAnswers(current.acceptedAnswers, request.structured, response.acceptedAnswers)
-        : current.acceptedAnswers;
+      const submittedValues = "structured" in request ? request.structured : undefined;
+      const acceptedAnswers = mergeAcceptedAnswers(
+        current.acceptedAnswers,
+        response.acceptedValues,
+        response.acceptedAnswers,
+        submittedValues,
+      );
       persist({ ...current, acceptedAnswers, progression: response.progression, lastAnswerResponse: response });
       return response;
     } catch (caught) {
@@ -385,15 +389,20 @@ function toStored(active: ActivePreTriageInternal): StoredAnonymousPreTriage {
 
 export function mergeAcceptedAnswers(
   current: StructuredPreTriageAnswers,
-  submitted: StructuredPreTriageAnswers,
+  acceptedValues: StructuredPreTriageAnswers | null | undefined,
   accepted: PreTriageAnswerResponse["acceptedAnswers"],
+  submittedValues?: StructuredPreTriageAnswers,
 ) {
+  const duration = acceptedValues?.duration ?? submittedValues?.duration;
+  const intensity = acceptedValues?.intensity ?? submittedValues?.intensity;
+  const additionalSymptoms = acceptedValues?.additionalSymptoms ?? submittedValues?.additionalSymptoms;
+
   return {
     ...current,
-    ...(accepted.includes("DURATION") && submitted.duration ? { duration: submitted.duration } : {}),
-    ...(accepted.includes("INTENSITY") && submitted.intensity !== undefined ? { intensity: submitted.intensity } : {}),
-    ...(accepted.includes("ADDITIONAL_SYMPTOMS") && submitted.additionalSymptoms !== undefined
-      ? { additionalSymptoms: submitted.additionalSymptoms }
+    ...(accepted.includes("DURATION") && duration ? { duration } : {}),
+    ...(accepted.includes("INTENSITY") && intensity !== undefined ? { intensity } : {}),
+    ...(accepted.includes("ADDITIONAL_SYMPTOMS") && additionalSymptoms !== undefined
+      ? { additionalSymptoms }
       : {}),
   };
 }

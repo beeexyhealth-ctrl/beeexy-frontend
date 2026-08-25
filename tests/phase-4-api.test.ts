@@ -47,7 +47,12 @@ const answerResponse: PreTriageAnswerResponse = {
   pathway: "HEADACHE",
   questionnaireVersion,
   outcome: "ACCEPTED",
-  acceptedAnswers: ["DURATION"],
+  acceptedAnswers: ["DURATION", "INTENSITY", "ADDITIONAL_SYMPTOMS"],
+  acceptedValues: {
+    duration: { value: 1, unit: "MONTHS" },
+    intensity: 3,
+    additionalSymptoms: ["NAUSEA"],
+  },
   progression: {
     state: "IN_PROGRESS",
     answeredRequiredFields: ["DURATION"],
@@ -115,7 +120,7 @@ describe("Beeexy Phase 4 API contract", () => {
   it("submits anonymous answers with capability, no Bearer, and the exact natural-language body", async () => {
     const fetcher = vi.fn<TestFetch>(async () => json(answerResponse));
 
-    await createApi(fetcher, new MemoryStore(null)).submitPreTriageAnswers(sessionId, { questionnaireVersion, naturalLanguage: "It started yesterday." }, { mode: "anonymous", capability });
+    const response = await createApi(fetcher, new MemoryStore(null)).submitPreTriageAnswers(sessionId, { questionnaireVersion, naturalLanguage: "It started yesterday." }, { mode: "anonymous", capability });
 
     const [url, init] = fetcher.mock.calls[0];
     expect(url).toBe(`${baseUrl}/api/v1/pre-triage/sessions/${sessionId}/answers`);
@@ -123,6 +128,11 @@ describe("Beeexy Phase 4 API contract", () => {
     expect(JSON.parse(String(init?.body))).toEqual({ questionnaireVersion, naturalLanguage: "It started yesterday." });
     expect((init?.headers as Headers).get(PRE_TRIAGE_CAPABILITY_HEADER)).toBe(capability);
     expect((init?.headers as Headers).get("Authorization")).toBeNull();
+    expect(response.acceptedValues).toEqual({
+      duration: { value: 1, unit: "MONTHS" },
+      intensity: 3,
+      additionalSymptoms: ["NAUSEA"],
+    });
   });
 
   it("completes without a body and preserves whether the backend returned 201", async () => {

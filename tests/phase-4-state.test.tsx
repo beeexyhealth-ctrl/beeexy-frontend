@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { NeutralPreTriageResult, QuestionnaireProgress } from "@/lib/beeexy-api/contracts";
 import {
   allowedAdditionalSymptoms,
+  PreTriageReviewSummary,
   questionForProgression,
   ResultSummary,
   SUPPORTED_PATHWAYS,
@@ -90,6 +91,57 @@ describe("Phase 4 supported intake", () => {
 
   it("records only fields the backend confirms as accepted", () => {
     expect(mergeAcceptedAnswers({}, { duration: { value: 2, unit: "DAYS" }, intensity: 6 }, ["DURATION"])).toEqual({ duration: { value: 2, unit: "DAYS" } });
+  });
+
+  it("renders multiple natural-language values accepted by the backend", () => {
+    const answers = mergeAcceptedAnswers({}, {
+      duration: { value: 1, unit: "MONTHS" },
+      intensity: 3,
+      additionalSymptoms: ["NAUSEA"],
+    }, ["DURATION", "INTENSITY", "ADDITIONAL_SYMPTOMS"]);
+    const markup = renderToStaticMarkup(<PreTriageReviewSummary pathway="HEADACHE" answers={answers} />);
+
+    expect(markup).toContain("1 month");
+    expect(markup).toContain("3 / 10");
+    expect(markup).toContain("Nausea");
+    expect(markup).not.toContain("Captured from your description");
+  });
+
+  it("merges values accepted across multiple submissions without erasing earlier values", () => {
+    const first = mergeAcceptedAnswers({}, { duration: { value: 2, unit: "DAYS" } }, ["DURATION"]);
+    const second = mergeAcceptedAnswers(first, { additionalSymptoms: ["FEVER"] }, ["ADDITIONAL_SYMPTOMS"]);
+
+    expect(second).toEqual({ duration: { value: 2, unit: "DAYS" }, additionalSymptoms: ["FEVER"] });
+  });
+
+  it("keeps structured input compatible when acceptedValues is absent", () => {
+    expect(mergeAcceptedAnswers({}, null, ["INTENSITY"], { intensity: 7 })).toEqual({ intensity: 7 });
+  });
+
+  it("prefers authoritative backend values over the submitted structured value", () => {
+    expect(mergeAcceptedAnswers({}, { intensity: 6 }, ["INTENSITY"], { intensity: 7 })).toEqual({ intensity: 6 });
+  });
+
+  it("does not fabricate values when neither acceptedValues nor structured input provides them", () => {
+    const answers = mergeAcceptedAnswers({}, null, ["DURATION", "INTENSITY"]);
+    const markup = renderToStaticMarkup(<PreTriageReviewSummary pathway="HEADACHE" answers={answers} />);
+
+    expect(answers).toEqual({});
+    expect(markup.match(/Captured from your description/g)).toHaveLength(3);
+    expect(markup).not.toContain("0 / 10");
+  });
+
+  it.each([
+    [{ value: 1, unit: "DAYS" as const }, "1 day"],
+    [{ value: 2, unit: "DAYS" as const }, "2 days"],
+    [{ value: 1, unit: "MONTHS" as const }, "1 month"],
+    [{ value: 2, unit: "MONTHS" as const }, "2 months"],
+    [{ value: 1, unit: "MINUTES" as const }, "1 minute"],
+    [{ value: 2, unit: "HOURS" as const }, "2 hours"],
+    [{ value: 1, unit: "WEEKS" as const }, "1 week"],
+  ])("formats accepted duration %o as %s", (duration, expected) => {
+    const markup = renderToStaticMarkup(<PreTriageReviewSummary pathway="HEADACHE" answers={{ duration }} />);
+    expect(markup).toContain(expected);
   });
 
   it("supports multi-field natural-language progression without inferring missing controls locally", () => {

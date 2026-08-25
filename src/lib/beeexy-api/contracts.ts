@@ -273,6 +273,7 @@ export interface PreTriageAnswerResponse {
   questionnaireVersion: string;
   outcome: TriageIntakeOutcome;
   acceptedAnswers: RequiredAnswerCode[];
+  acceptedValues: StructuredPreTriageAnswers | null;
   progression: QuestionnaireProgress;
   clarification?: IntakeClarification;
 }
