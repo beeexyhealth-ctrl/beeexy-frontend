@@ -45,8 +45,26 @@ function amendment(amendmentId: string, reason: string, createdAt: string): Clin
   return { amendmentId, reason, author: { type: "BEEEXY_ACCOUNT", beeexyId: "BXY-A" }, createdAt, provenance };
 }
 
-function detail(amendments: ClinicalHistoryAmendment[] = []): ClinicalHistoryEventDetail {
-  return { ...historyItem("event-detail"), source, provenance, amendments };
+type PreTriageSummaryOverrides = Pick<
+  ClinicalHistoryEventDetail,
+  "additionalSymptoms" | "duration" | "intensity" | "primarySymptom"
+>;
+
+function detail(
+  amendments: ClinicalHistoryAmendment[] = [],
+  summary: Partial<PreTriageSummaryOverrides> = {},
+): ClinicalHistoryEventDetail {
+  return {
+    ...historyItem("event-detail"),
+    source,
+    provenance,
+    amendments,
+    primarySymptom: null,
+    duration: null,
+    intensity: null,
+    additionalSymptoms: null,
+    ...summary,
+  };
 }
 
 function deferred<T>() {
@@ -120,6 +138,54 @@ describe("Clinical History list", () => {
 });
 
 describe("Clinical History detail and amendments", () => {
+  it("renders the full patient-facing Pre-Triage summary before technical metadata", async () => {
+    vi.mocked(beeexyPhase5Api.getClinicalHistoryEvent).mockResolvedValue(detail([
+      amendment("amendment-1", "Corrected note", "2026-08-24T15:00:00Z"),
+    ], {
+      primarySymptom: { code: "HEADACHE", display: "Headache" },
+      duration: { value: 2, unit: "DAYS" },
+      intensity: 7,
+      additionalSymptoms: ["FEVER", "NAUSEA"],
+    }));
+    render(<ClinicalHistoryEventView eventId="event-detail" />);
+
+    const summary = await screen.findByRole("heading", { name: "Pre-Triage Summary" });
+    const metadata = screen.getByRole("heading", { name: "Original event metadata" });
+    expect(summary.compareDocumentPosition(metadata) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText("Headache")).toBeInTheDocument();
+    expect(screen.getByText("2 days")).toBeInTheDocument();
+    expect(screen.getByText("7")).toHaveTextContent("7 / 10");
+    expect(screen.getByText("Fever")).toBeInTheDocument();
+    expect(screen.getByText("Nausea")).toBeInTheDocument();
+    expect(screen.getByText("Technical traceability")).toBeInTheDocument();
+    expect(screen.getByText("Corrected note")).toBeInTheDocument();
+    expect(screen.queryByText(/urgency|diagnosis|recommendation|treatment|red flag/i)).not.toBeInTheDocument();
+  });
+
+  it("hides missing summary rows and formats a singular duration", async () => {
+    vi.mocked(beeexyPhase5Api.getClinicalHistoryEvent).mockResolvedValue(detail([], {
+      primarySymptom: null,
+      duration: { value: 1, unit: "HOURS" },
+      intensity: null,
+      additionalSymptoms: null,
+    }));
+    render(<ClinicalHistoryEventView eventId="event-detail" />);
+
+    expect(await screen.findByRole("heading", { name: "Pre-Triage Summary" })).toBeInTheDocument();
+    expect(screen.getByText("1 hour")).toBeInTheDocument();
+    expect(screen.queryByText("Primary symptom")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pain intensity")).not.toBeInTheDocument();
+    expect(screen.queryByText("Additional symptoms")).not.toBeInTheDocument();
+  });
+
+  it("does not render an empty summary when all values are absent or symptoms are empty", async () => {
+    vi.mocked(beeexyPhase5Api.getClinicalHistoryEvent).mockResolvedValue(detail([], { additionalSymptoms: [] }));
+    render(<ClinicalHistoryEventView eventId="event-detail" />);
+
+    expect(await screen.findByText("Original event metadata")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Pre-Triage Summary" })).not.toBeInTheDocument();
+  });
+
   it("renders authoritative metadata and amendments in backend oldest-to-newest order", async () => {
     vi.mocked(beeexyPhase5Api.getClinicalHistoryEvent).mockResolvedValue(detail([
       amendment("amendment-1", "First correction", "2026-08-24T15:00:00Z"),

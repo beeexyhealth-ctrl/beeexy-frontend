@@ -70,7 +70,15 @@ describe("Beeexy Phase 5 API contract", () => {
   });
 
   it("reads an event through the patient-scoped detail route", async () => {
-    const detail: ClinicalHistoryEventDetail = { ...item, provenance: { sourceType: source.type, sourceId: source.id, questionnaireVersionId: source.questionnaireVersionId, clinicalRuleSetVersionId: source.clinicalRuleSetVersionId }, amendments: [] };
+    const detail: ClinicalHistoryEventDetail = {
+      ...item,
+      primarySymptom: { code: "HEADACHE", display: "Headache" },
+      duration: { value: 2, unit: "DAYS" },
+      intensity: 7,
+      additionalSymptoms: ["FEVER"],
+      provenance: { sourceType: source.type, sourceId: source.id, questionnaireVersionId: source.questionnaireVersionId, clinicalRuleSetVersionId: source.clinicalRuleSetVersionId },
+      amendments: [],
+    };
     const fetcher = vi.fn<TestFetch>(async () => json(detail));
 
     await expect(createApi(fetcher).getClinicalHistoryEvent(patientId, eventId)).resolves.toEqual(detail);

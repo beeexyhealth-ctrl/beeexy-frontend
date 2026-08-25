@@ -1,4 +1,4 @@
-import type { ClinicalHistoryItem } from "@/lib/beeexy-api/contracts";
+import type { AdditionalSymptom, ClinicalHistoryItem, DurationAnswer, DurationUnit } from "@/lib/beeexy-api/contracts";
 import { BeeexyApiError, BeeexyNetworkError } from "@/lib/beeexy-api/problem-details";
 
 export function appendUniqueHistoryItems(current: ClinicalHistoryItem[], incoming: ClinicalHistoryItem[]) {
@@ -14,6 +14,29 @@ export function isInvalidHistoryCursor(error: unknown) {
   return error instanceof BeeexyApiError
     && error.status === 422
     && error.problem?.errorCode === "clinical_history.cursor_invalid";
+}
+
+const DURATION_UNIT_LABELS: Record<DurationUnit, string> = {
+  MINUTES: "minute",
+  HOURS: "hour",
+  DAYS: "day",
+  WEEKS: "week",
+  MONTHS: "month",
+};
+
+const ADDITIONAL_SYMPTOM_LABELS: Record<AdditionalSymptom, string> = {
+  NAUSEA: "Nausea",
+  DIARRHEA: "Diarrhea",
+  FEVER: "Fever",
+};
+
+export function formatClinicalHistoryDuration(duration: DurationAnswer) {
+  const unit = DURATION_UNIT_LABELS[duration.unit];
+  return `${duration.value} ${duration.value === 1 ? unit : `${unit}s`}`;
+}
+
+export function formatClinicalHistoryAdditionalSymptom(symptom: AdditionalSymptom) {
+  return ADDITIONAL_SYMPTOM_LABELS[symptom];
 }
 
 export function historyErrorMessage(error: unknown) {

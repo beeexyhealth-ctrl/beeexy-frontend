@@ -37,6 +37,10 @@ function detail(sourceId: string): ClinicalHistoryEventDetail {
     occurredAt: "2026-08-24T14:30:00Z",
     recordedAt: "2026-08-24T14:30:00Z",
     source,
+    primarySymptom: null,
+    duration: null,
+    intensity: null,
+    additionalSymptoms: null,
     provenance: { sourceType: source.type, sourceId, questionnaireVersionId: source.questionnaireVersionId, clinicalRuleSetVersionId: source.clinicalRuleSetVersionId },
     amendments: [],
   };

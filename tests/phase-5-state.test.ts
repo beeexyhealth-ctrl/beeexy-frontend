@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { appendUniqueHistoryItems, amendmentErrorMessage, historyErrorMessage, isInvalidHistoryCursor } from "@/features/clinical-history/clinical-history-state";
+import {
+  appendUniqueHistoryItems,
+  amendmentErrorMessage,
+  formatClinicalHistoryAdditionalSymptom,
+  formatClinicalHistoryDuration,
+  historyErrorMessage,
+  isInvalidHistoryCursor,
+} from "@/features/clinical-history/clinical-history-state";
 import { BeeexyApiError, BeeexyNetworkError } from "@/lib/beeexy-api/problem-details";
 
 function item(eventId: string) {
@@ -13,6 +20,19 @@ function item(eventId: string) {
 }
 
 describe("Phase 5 client state rules", () => {
+  it.each([
+    [{ value: 1, unit: "DAYS" as const }, "1 day"],
+    [{ value: 2, unit: "DAYS" as const }, "2 days"],
+    [{ value: 3, unit: "HOURS" as const }, "3 hours"],
+  ])("formats duration %# as patient-facing singular/plural text", (duration, expected) => {
+    expect(formatClinicalHistoryDuration(duration)).toBe(expected);
+  });
+
+  it("formats additional symptom enum values as readable labels", () => {
+    expect(["FEVER", "NAUSEA", "DIARRHEA"].map((value) => formatClinicalHistoryAdditionalSymptom(value as "FEVER" | "NAUSEA" | "DIARRHEA")))
+      .toEqual(["Fever", "Nausea", "Diarrhea"]);
+  });
+
   it("appends all pages without a ten-record cap and defensively deduplicates event IDs", () => {
     const first = Array.from({ length: 11 }, (_, index) => item(`event-${index}`));
     const merged = appendUniqueHistoryItems(first, [item("event-10"), item("event-11"), item("event-12")]);

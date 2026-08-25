@@ -347,6 +347,13 @@ export interface ClinicalHistoryAmendment {
 }
 
 export interface ClinicalHistoryEventDetail extends ClinicalHistoryItem {
+  primarySymptom: {
+    code: PreTriagePathway;
+    display: string;
+  } | null;
+  duration: DurationAnswer | null;
+  intensity: number | null;
+  additionalSymptoms: AdditionalSymptom[] | null;
   provenance: ClinicalHistoryProvenance;
   amendments: ClinicalHistoryAmendment[];
 }

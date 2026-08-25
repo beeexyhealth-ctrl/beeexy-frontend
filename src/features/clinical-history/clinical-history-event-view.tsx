@@ -7,7 +7,12 @@ import { usePatients } from "@/features/my-circle/patient-provider";
 import type { ClinicalHistoryAmendment, ClinicalHistoryEventDetail } from "@/lib/beeexy-api/contracts";
 import { beeexyPhase5Api } from "@/lib/beeexy-api/phase-5-api";
 import { BeeexyApiError } from "@/lib/beeexy-api/problem-details";
-import { amendmentErrorMessage, historyErrorMessage } from "./clinical-history-state";
+import {
+  amendmentErrorMessage,
+  formatClinicalHistoryAdditionalSymptom,
+  formatClinicalHistoryDuration,
+  historyErrorMessage,
+} from "./clinical-history-state";
 import { HealthDataExport } from "./health-data-export";
 import { useClinicalHistoryEvent } from "./use-clinical-history";
 
@@ -45,7 +50,7 @@ function EventShell({ children }: { children: React.ReactNode }) {
     <div className="page clinical-history-detail-page">
       <header className="subview-header">
         <Link className="icon-button" href="/history" aria-label="Back to Clinical History"><Icon name="arrow-left" size={17} /></Link>
-        <div><h1>Clinical History event</h1><p>Original record and traceable corrections</p></div>
+        <div><h1>Clinical History event</h1><p>Your Pre-Triage record and corrections</p></div>
       </header>
       {children}
     </div>
@@ -74,6 +79,8 @@ function EventDetail({ detail, patientId, refresh, refreshPatients }: {
         <span><Icon name="activity" size={20} /></span>
         <div><p>Original record</p><h2 id="original-record-heading">Pre-Triage</h2><time dateTime={detail.occurredAt}>{DATE_TIME_FORMAT.format(new Date(detail.occurredAt))}</time></div>
       </section>
+
+      <PreTriageSummary detail={detail} />
 
       <section className="history-detail-section" aria-labelledby="record-metadata-heading">
         <div className="history-section-heading">
@@ -120,6 +127,59 @@ function EventDetail({ detail, patientId, refresh, refreshPatients }: {
         onUnavailable={async () => { setInaccessible(true); await refreshPatients(); }}
       />
     </>
+  );
+}
+
+function PreTriageSummary({ detail }: { detail: ClinicalHistoryEventDetail }) {
+  const hasAdditionalSymptoms = Boolean(detail.additionalSymptoms?.length);
+  const hasSummary = Boolean(
+    detail.primarySymptom
+    || detail.duration
+    || detail.intensity !== null
+    || hasAdditionalSymptoms,
+  );
+
+  if (!hasSummary) return null;
+
+  return (
+    <section className="history-detail-section pretriage-history-summary" aria-labelledby="pretriage-summary-heading">
+      <header className="pretriage-summary-heading">
+        <span><Icon name="document" size={18} /></span>
+        <div><p>Your reported information</p><h2 id="pretriage-summary-heading">Pre-Triage Summary</h2></div>
+      </header>
+      <dl className="pretriage-summary-list">
+        {detail.primarySymptom && (
+          <div className="pretriage-summary-primary">
+            <dt>Primary symptom</dt>
+            <dd>{detail.primarySymptom.display}</dd>
+          </div>
+        )}
+        {detail.duration && (
+          <div>
+            <dt>Duration</dt>
+            <dd>{formatClinicalHistoryDuration(detail.duration)}</dd>
+          </div>
+        )}
+        {detail.intensity !== null && (
+          <div>
+            <dt>Pain intensity</dt>
+            <dd>{detail.intensity} <span>/ 10</span></dd>
+          </div>
+        )}
+        {hasAdditionalSymptoms && (
+          <div className="pretriage-summary-additional">
+            <dt>Additional symptoms</dt>
+            <dd>
+              <ul aria-label="Additional symptoms">
+                {detail.additionalSymptoms?.map((symptom) => (
+                  <li key={symptom}>{formatClinicalHistoryAdditionalSymptom(symptom)}</li>
+                ))}
+              </ul>
+            </dd>
+          </div>
+        )}
+      </dl>
+    </section>
   );
 }
 
