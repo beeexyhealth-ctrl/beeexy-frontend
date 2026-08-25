@@ -363,3 +363,34 @@ export interface ClinicalHistoryQuery {
   pageSize?: number;
   eventType?: ClinicalHistoryEventType;
 }
+
+export type FhirExportStatus =
+  | "Pending"
+  | "Generated"
+  | "ValidationFailed"
+  | "Validated";
+
+export type FhirExportValidationOutcome = "Failed" | "Passed";
+
+export interface FhirExportValidationMetadata {
+  outcome: FhirExportValidationOutcome;
+  errorCount: number;
+  warningCount: number;
+  completedAt: IsoTimestamp;
+}
+
+export interface FhirExportMetadata {
+  id: Uuid;
+  status: FhirExportStatus;
+  fhirVersion: string;
+  mappingVersion: string;
+  createdAt: IsoTimestamp;
+  generatedAt: IsoTimestamp | null;
+  validationCompletedAt: IsoTimestamp | null;
+  validation: FhirExportValidationMetadata | null;
+}
+
+export interface CreateFhirExportRequest {
+  sourceClinicalHistoryEventId: Uuid;
+  idempotencyKey: Uuid;
+}

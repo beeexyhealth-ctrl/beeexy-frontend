@@ -8,6 +8,7 @@ import type { ClinicalHistoryAmendment, ClinicalHistoryEventDetail } from "@/lib
 import { beeexyPhase5Api } from "@/lib/beeexy-api/phase-5-api";
 import { BeeexyApiError } from "@/lib/beeexy-api/problem-details";
 import { amendmentErrorMessage, historyErrorMessage } from "./clinical-history-state";
+import { HealthDataExport } from "./health-data-export";
 import { useClinicalHistoryEvent } from "./use-clinical-history";
 
 const DATE_TIME_FORMAT = new Intl.DateTimeFormat("en-US", { dateStyle: "long", timeStyle: "short" });
@@ -19,7 +20,7 @@ export function ClinicalHistoryEventView({ eventId }: { eventId: string }) {
   const event = useClinicalHistoryEvent(patientId, eventId, handleUnavailable);
 
   if (event.isLoading) return <EventShell><EventSkeleton /></EventShell>;
-  if (event.error || !event.detail) {
+  if (event.error || !event.detail || !patientId) {
     return (
       <EventShell>
         <div className="collection-empty history-empty history-error" role="alert">
@@ -34,7 +35,7 @@ export function ClinicalHistoryEventView({ eventId }: { eventId: string }) {
 
   return (
     <EventShell>
-      <EventDetail key={`${patientId}:${eventId}`} detail={event.detail} refresh={event.refresh} refreshPatients={handleUnavailable} />
+      <EventDetail key={`${patientId}:${eventId}`} detail={event.detail} patientId={patientId} refresh={event.refresh} refreshPatients={handleUnavailable} />
     </EventShell>
   );
 }
@@ -51,8 +52,9 @@ function EventShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function EventDetail({ detail, refresh, refreshPatients }: {
+function EventDetail({ detail, patientId, refresh, refreshPatients }: {
   detail: ClinicalHistoryEventDetail;
+  patientId: string;
   refresh: () => Promise<ClinicalHistoryEventDetail | null>;
   refreshPatients: () => void | Promise<void>;
 }) {
@@ -111,6 +113,12 @@ function EventDetail({ detail, refresh, refreshPatients }: {
           onUnavailable={async () => { setInaccessible(true); await refreshPatients(); }}
         />
       </section>
+
+      <HealthDataExport
+        eventId={detail.eventId}
+        patientId={patientId}
+        onUnavailable={async () => { setInaccessible(true); await refreshPatients(); }}
+      />
     </>
   );
 }

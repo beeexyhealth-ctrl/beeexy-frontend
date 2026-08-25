@@ -59,6 +59,24 @@ export class BeeexyApiClient {
     return this.readResponseWithStatus<T>(response, options.expectedStatus);
   }
 
+  async requestAuthenticatedRaw(path: string, options: RequestOptions = {}) {
+    let session = this.requireSession();
+
+    if (accessTokenNeedsRefresh(session)) {
+      session = await this.refreshSession();
+    }
+
+    let response = await this.fetchResponse(path, options, session.accessToken);
+    if (response.status === 401) {
+      session = await this.refreshSession();
+      response = await this.fetchResponse(path, options, session.accessToken);
+      if (response.status === 401) this.sessionStore.clear();
+    }
+
+    await this.assertExpectedResponse(response, options.expectedStatus);
+    return response;
+  }
+
   refreshSession() {
     if (!this.refreshInFlight) {
       this.refreshInFlight = this.performRefresh().finally(() => {
@@ -122,6 +140,14 @@ export class BeeexyApiClient {
   }
 
   private async readResponseWithStatus<T>(response: Response, expectedStatus?: number | number[]): Promise<BeeexyApiResponse<T>> {
+    await this.assertExpectedResponse(response, expectedStatus);
+    const data = response.status === 202 || response.status === 204
+      ? undefined as T
+      : await response.json() as T;
+    return { data, status: response.status };
+  }
+
+  private async assertExpectedResponse(response: Response, expectedStatus?: number | number[]) {
     const expected = expectedStatus === undefined
       ? response.ok
       : Array.isArray(expectedStatus)
@@ -130,10 +156,6 @@ export class BeeexyApiClient {
     if (!response.ok || !expected) {
       throw await createApiError(response);
     }
-    const data = response.status === 202 || response.status === 204
-      ? undefined as T
-      : await response.json() as T;
-    return { data, status: response.status };
   }
 }
 
