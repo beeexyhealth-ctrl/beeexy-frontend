@@ -7,6 +7,7 @@ import { EntryLoading } from "@/features/entry/entry-loading";
 import { usePatients } from "@/features/my-circle/patient-provider";
 import { isPrimaryProfileComplete } from "@/features/my-circle/patient-state";
 import { usePreTriage } from "@/features/pre-triage/pre-triage-provider";
+import { usePrivateAccess } from "@/features/private-access/private-access-provider";
 import { useAuth } from "./auth-provider";
 
 const PUBLIC_ENTRY_ROUTES = new Set(["/", "/login", "/onboarding", "/sign-in"]);
@@ -28,6 +29,7 @@ export function AuthRouteBoundary({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { logout, retryBootstrap, status } = useAuth();
+  const { exitDemo } = usePrivateAccess();
   const { pendingClaimRoute } = usePreTriage();
   const {
     activePatient,
@@ -76,7 +78,7 @@ export function AuthRouteBoundary({ children }: { children: React.ReactNode }) {
           <h1 id="bootstrap-error-heading">We couldn’t finish loading your account.</h1>
           <p>Your session is still stored securely on this device. Check the backend connection and try again.</p>
           <button className="entry-primary-button" type="button" onClick={() => void retryBootstrap()}>Try again</button>
-          <button className="text-button" type="button" onClick={() => void logout()}>Sign out</button>
+          <button className="text-button" type="button" onClick={() => void exitDemo(logout)}>Sign out</button>
         </section>
       </main>
     );
@@ -91,7 +93,7 @@ export function AuthRouteBoundary({ children }: { children: React.ReactNode }) {
           <h1 id="patient-bootstrap-error-heading">We couldn’t load your patient profiles.</h1>
           <p>Your account is signed in. Try loading My Circle again before continuing.</p>
           <button className="entry-primary-button" type="button" onClick={() => void retryPatientBootstrap()}>Try again</button>
-          <button className="text-button" type="button" onClick={() => void logout()}>Sign out</button>
+          <button className="text-button" type="button" onClick={() => void exitDemo(logout)}>Sign out</button>
         </section>
       </main>
     );

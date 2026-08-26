@@ -28,10 +28,12 @@ export interface PrivateAccessFeedback {
 }
 
 type PrivateAccessContextValue = {
+  exiting: boolean;
   feedback: PrivateAccessFeedback | null;
   retryAfterSeconds: number;
   session: PrivateAccessSessionStatus | null;
   state: PrivateAccessState;
+  exitDemo(logoutBeeexy: () => Promise<void>): Promise<void>;
   login(request: PrivateAccessLoginRequest): Promise<boolean>;
   logout(): Promise<void>;
   retrySessionCheck(): Promise<void>;
@@ -43,6 +45,7 @@ export function PrivateAccessProvider({ children }: { children: React.ReactNode 
   const [state, setState] = useState<PrivateAccessState>("checking");
   const [session, setSession] = useState<PrivateAccessSessionStatus | null>(null);
   const [feedback, setFeedback] = useState<PrivateAccessFeedback | null>(null);
+  const [exiting, setExiting] = useState(false);
   const [retryUntil, setRetryUntil] = useState<number | null>(null);
   const [retryAfterSeconds, setRetryAfterSeconds] = useState(0);
   const operationInFlight = useRef(false);
@@ -109,9 +112,7 @@ export function PrivateAccessProvider({ children }: { children: React.ReactNode 
 
     try {
       await beeexyPrivateAccessApi.loginPrivateAccess(request);
-      const nextSession = await beeexyPrivateAccessApi.getPrivateAccessSession();
-      if (!nextSession.authenticated) throw new Error("Private access session was not established.");
-      setSession(nextSession);
+      setSession(null);
       setRetryUntil(null);
       setRetryAfterSeconds(0);
       setState("unlocked");
@@ -153,15 +154,42 @@ export function PrivateAccessProvider({ children }: { children: React.ReactNode 
     }
   }, []);
 
+  const exitDemo = useCallback(async (logoutBeeexy: () => Promise<void>) => {
+    if (operationInFlight.current) return;
+    operationInFlight.current = true;
+    setExiting(true);
+    setFeedback(null);
+
+    try {
+      await logoutBeeexy();
+      await beeexyPrivateAccessApi.logoutPrivateAccess();
+      setFeedback(null);
+    } catch {
+      setFeedback({
+        kind: "temporary",
+        message: "Beeexy signed out, but private demo exit could not finish. Check the connection before continuing.",
+      });
+    } finally {
+      setSession(null);
+      setRetryUntil(null);
+      setRetryAfterSeconds(0);
+      setState("locked");
+      setExiting(false);
+      operationInFlight.current = false;
+    }
+  }, []);
+
   const value = useMemo<PrivateAccessContextValue>(() => ({
+    exiting,
     feedback,
     retryAfterSeconds,
     session,
     state,
+    exitDemo,
     login,
     logout,
     retrySessionCheck: checkSession,
-  }), [checkSession, feedback, login, logout, retryAfterSeconds, session, state]);
+  }), [checkSession, exitDemo, exiting, feedback, login, logout, retryAfterSeconds, session, state]);
 
   return (
     <PrivateAccessContext.Provider value={value}>

@@ -7,6 +7,7 @@ import { notifyPrivateAccessRequired } from "@/lib/beeexy-api/private-access-eve
 import { PrivateAccessProvider } from "@/features/private-access/private-access-provider";
 
 const privateAccessApi = vi.hoisted(() => ({
+  createDemoGuestSession: vi.fn(),
   getPrivateAccessSession: vi.fn(),
   loginPrivateAccess: vi.fn(),
   logoutPrivateAccess: vi.fn(),
@@ -30,6 +31,7 @@ async function fillAndSubmit(username = "demo-user", password = "demo-password",
 }
 
 beforeEach(() => {
+  privateAccessApi.createDemoGuestSession.mockReset();
   privateAccessApi.getPrivateAccessSession.mockReset();
   privateAccessApi.loginPrivateAccess.mockReset();
   privateAccessApi.logoutPrivateAccess.mockReset();
@@ -81,8 +83,7 @@ describe("Private Access bootstrap", () => {
 describe("Private Access form", () => {
   it("renders all secret fields and submits the exact, unnormalized payload once", async () => {
     privateAccessApi.getPrivateAccessSession
-      .mockResolvedValueOnce({ authenticated: false, expiresAt: null })
-      .mockResolvedValueOnce({ authenticated: true, expiresAt: null });
+      .mockResolvedValueOnce({ authenticated: false, expiresAt: null });
     privateAccessApi.loginPrivateAccess.mockResolvedValueOnce(undefined);
     const localStorageSpy = vi.spyOn(Storage.prototype, "setItem");
     renderGate();
@@ -104,8 +105,7 @@ describe("Private Access form", () => {
   it("prevents duplicate submissions while login is pending", async () => {
     let resolveLogin!: () => void;
     privateAccessApi.getPrivateAccessSession
-      .mockResolvedValueOnce({ authenticated: false, expiresAt: null })
-      .mockResolvedValueOnce({ authenticated: true, expiresAt: null });
+      .mockResolvedValueOnce({ authenticated: false, expiresAt: null });
     privateAccessApi.loginPrivateAccess.mockImplementationOnce(() => new Promise<void>((resolve) => {
       resolveLogin = resolve;
     }));

@@ -1,5 +1,6 @@
 import { BeeexyApiClient } from "./api-client";
 import { beeexyApiClient } from "./auth-api";
+import type { AuthenticationResponse } from "./contracts";
 
 export interface PrivateAccessLoginRequest {
   username: string;
@@ -25,6 +26,14 @@ export class BeeexyPrivateAccessApi {
 
   getPrivateAccessSession() {
     return this.client.requestPublic<PrivateAccessSessionStatus>("/api/v1/private-access/session", {
+      expectedStatus: 200,
+    });
+  }
+
+  createDemoGuestSession() {
+    return this.client.requestPublic<AuthenticationResponse>("/api/v1/private-access/guest-session", {
+      method: "POST",
+      headers: { Accept: "application/json, application/problem+json" },
       expectedStatus: 200,
     });
   }

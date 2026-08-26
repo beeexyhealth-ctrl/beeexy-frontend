@@ -3,6 +3,7 @@ import { BeeexyApiClient } from "@/lib/beeexy-api/api-client";
 import { BeeexyPrivateAccessApi } from "@/lib/beeexy-api/private-access-api";
 import { subscribeToPrivateAccessRequired } from "@/lib/beeexy-api/private-access-events";
 import type { BeeexySession, SessionStore } from "@/lib/beeexy-api/session-storage";
+import type { AuthenticationResponse } from "@/lib/beeexy-api/contracts";
 
 const baseUrl = "http://localhost:5105";
 type TestFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -46,6 +47,31 @@ describe("Beeexy Private Access API", () => {
     expect(fetcher.mock.calls[1][1]?.method).toBe("GET");
     expect(fetcher.mock.calls[2][1]?.method).toBe("POST");
     for (const [, init] of fetcher.mock.calls) expect(init?.credentials).toBe("include");
+  });
+
+  it("creates a Demo Guest session with a bodyless credentialed request", async () => {
+    const authentication: AuthenticationResponse = {
+      accessToken: "guest-access-token",
+      refreshToken: "guest-refresh-token",
+      accessTokenExpiresAt: "2099-01-01T00:00:00Z",
+      refreshTokenExpiresAt: "2099-02-01T00:00:00Z",
+      account: { accountId: "account", profileId: "profile", beeexyId: "BXY-GUEST" },
+    };
+    const fetcher = vi.fn<TestFetch>(async () => new Response(JSON.stringify(authentication), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }));
+    const api = new BeeexyPrivateAccessApi(new BeeexyApiClient(baseUrl, new MemorySessionStore(), fetcher));
+
+    await expect(api.createDemoGuestSession()).resolves.toEqual(authentication);
+
+    const [url, init] = fetcher.mock.calls[0];
+    expect(url).toBe(`${baseUrl}/api/v1/private-access/guest-session`);
+    expect(init?.method).toBe("POST");
+    expect(init?.body).toBeUndefined();
+    expect(init?.credentials).toBe("include");
+    expect((init?.headers as Headers).get("Content-Type")).toBeNull();
+    expect((init?.headers as Headers).get("Accept")).toBe("application/json, application/problem+json");
   });
 
   it("sends the private cookie on public and authenticated product requests", async () => {

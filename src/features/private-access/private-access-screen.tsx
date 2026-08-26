@@ -130,7 +130,7 @@ export function PrivateAccessScreen() {
 
         <footer className="private-access-footer">
           <Icon name="lock" size={14} />
-          <p>Your access details are checked securely and are not saved on this device.</p>
+          <p>Access details are not saved. Demo activity is shared across visitors and is not automatically reset.</p>
         </footer>
       </div>
     </main>

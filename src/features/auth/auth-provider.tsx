@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { beeexyAuthApi } from "@/lib/beeexy-api/auth-api";
 import type { AuthenticationResponse, CurrentAccount, CurrentPatient } from "@/lib/beeexy-api/contracts";
 import { BeeexyApiError } from "@/lib/beeexy-api/problem-details";
+import { isPrivateAccessRequiredError } from "@/lib/beeexy-api/private-access-events";
 import {
   beeexySessionStore,
   type BeeexySession,
@@ -18,6 +19,7 @@ type AuthContextValue = {
   session: BeeexySession | null;
   status: AuthStatus;
   authenticateWithGoogle(credential: string): Promise<void>;
+  hydrateAuthentication(response: AuthenticationResponse): Promise<void>;
   logout(): Promise<void>;
   requestEmailChallenge(email: string): Promise<void>;
   resendEmailChallenge(email: string): Promise<void>;
@@ -56,7 +58,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setPatient(currentPatient);
       setStatus("authenticated");
     } catch (error) {
-      if (error instanceof BeeexyApiError && error.status === 401) {
+      if (error instanceof BeeexyApiError && error.status === 401 && !isPrivateAccessRequiredError(error)) {
         clearState();
       } else {
         setStatus("error");
@@ -110,7 +112,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setPatient(currentPatient);
       setStatus("authenticated");
     } catch (error) {
-      if (error instanceof BeeexyApiError && error.status === 401) clearState();
+      if (error instanceof BeeexyApiError && error.status === 401 && !isPrivateAccessRequiredError(error)) clearState();
       else if (beeexySessionStore.read()) {
         setStatus("error");
         throw new AuthenticationBootstrapError();
@@ -144,6 +146,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [finishAuthentication]);
 
+  const hydrateAuthentication = useCallback(async (response: AuthenticationResponse) => {
+    setStatus("authenticating");
+    await finishAuthentication(response);
+  }, [finishAuthentication]);
+
   const logout = useCallback(async () => {
     setStatus("signing-out");
     try {
@@ -164,12 +171,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     session,
     status,
     authenticateWithGoogle,
+    hydrateAuthentication,
     logout,
     requestEmailChallenge,
     resendEmailChallenge,
     retryBootstrap,
     verifyEmail,
-  }), [account, authenticateWithGoogle, logout, patient, requestEmailChallenge, resendEmailChallenge, retryBootstrap, session, status, verifyEmail]);
+  }), [account, authenticateWithGoogle, hydrateAuthentication, logout, patient, requestEmailChallenge, resendEmailChallenge, retryBootstrap, session, status, verifyEmail]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
