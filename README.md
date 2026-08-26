@@ -2,6 +2,14 @@
 
 Beeexy is implemented as a mobile-first Next.js App Router application. Authentication uses the Beeexy Phase 2 API; several existing product-demo data flows still use Supabase or local review fixtures until their later API phases are available.
 
+## Private Demo Access
+
+The deployed demo is wrapped in a separate Private Access boundary before normal Beeexy authentication. On every fresh application load, the browser checks `GET /api/v1/private-access/session`; protected providers and route content do not mount until that endpoint confirms access. The gate sends username, password, and keyword only to the documented login endpoint and never stores them in browser persistence.
+
+All Beeexy API requests use `credentials: "include"` through the shared API client. A protected request returning `401` with the exact Problem Details title `Private access required.` returns the UI to the gate without treating ordinary Beeexy authentication failures as private-session expiry. The backend contract is documented in `frontend-api-private-access.md`.
+
+The existing email, Google, login, and onboarding implementation remains in place after the deployment-level gate. Private Access logout and Beeexy account logout are separate operations.
+
 ## Included in the first vertical slice
 
 - PWA manifest, installable shell, safe offline page, and public-asset-only service worker
@@ -29,10 +37,11 @@ The backend returns its access and refresh tokens in JSON. The current browser c
 ## Manual authentication verification
 
 1. Start the backend and confirm `http://localhost:5105/health/ready` is healthy.
-2. Start the frontend at `http://localhost:3000`; this is the origin the backend CORS list must allow.
-3. Complete onboarding, request a code using a real inbox, enter the delivered OTP, and confirm `/auth/me` then `/patients/me` complete before `/home` opens.
-4. Sign out from Settings and confirm local session storage is removed and `/login` opens.
-5. For Google, use the rendered Google Identity Services button, complete the account chooser, and confirm the returned ID credential is exchanged before the same Beeexy bootstrap runs.
+2. Start the frontend at `http://localhost:3000`; this exact origin must be present in the backend CORS list.
+3. Enter the configured Private Demo Access details and confirm the session check succeeds.
+4. Complete onboarding, request a code using a real inbox, enter the delivered OTP, and confirm `/auth/me` then `/patients/me` complete before `/home` opens.
+5. Sign out from Settings and confirm local session storage is removed and `/login` opens.
+6. For Google, use the rendered Google Identity Services button, complete the account chooser, and confirm the returned ID credential is exchanged before the same Beeexy bootstrap runs.
 
 Without Supabase variables, later-phase product-demo data continues in local review mode. This does not affect Beeexy API authentication.
 

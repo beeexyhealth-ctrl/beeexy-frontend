@@ -1,5 +1,6 @@
 import type { AuthenticationResponse } from "./contracts";
 import { createApiError, BeeexyApiError, BeeexyNetworkError } from "./problem-details";
+import { isPrivateAccessRequiredError, notifyPrivateAccessRequired } from "./private-access-events";
 import type { BeeexySession, SessionStore } from "./session-storage";
 import { sessionFromAuthentication } from "./session-storage";
 
@@ -51,9 +52,13 @@ export class BeeexyApiClient {
 
     let response = await this.fetchResponse(path, options, session.accessToken);
     if (response.status === 401) {
+      await this.throwIfPrivateAccessRequired(response);
       session = await this.refreshSession();
       response = await this.fetchResponse(path, options, session.accessToken);
-      if (response.status === 401) this.sessionStore.clear();
+      if (response.status === 401) {
+        await this.throwIfPrivateAccessRequired(response);
+        this.sessionStore.clear();
+      }
     }
 
     return this.readResponseWithStatus<T>(response, options.expectedStatus);
@@ -68,9 +73,13 @@ export class BeeexyApiClient {
 
     let response = await this.fetchResponse(path, options, session.accessToken);
     if (response.status === 401) {
+      await this.throwIfPrivateAccessRequired(response);
       session = await this.refreshSession();
       response = await this.fetchResponse(path, options, session.accessToken);
-      if (response.status === 401) this.sessionStore.clear();
+      if (response.status === 401) {
+        await this.throwIfPrivateAccessRequired(response);
+        this.sessionStore.clear();
+      }
     }
 
     await this.assertExpectedResponse(response, options.expectedStatus);
@@ -99,7 +108,9 @@ export class BeeexyApiClient {
       this.sessionStore.write(nextSession);
       return nextSession;
     } catch (error) {
-      if (error instanceof BeeexyApiError && error.status === 401) this.sessionStore.clear();
+      if (error instanceof BeeexyApiError && error.status === 401 && !isPrivateAccessRequiredError(error)) {
+        this.sessionStore.clear();
+      }
       throw error;
     }
   }
@@ -129,6 +140,7 @@ export class BeeexyApiClient {
     try {
       return await this.fetchImplementation(`${this.baseUrl}${path}`, {
         method: options.method || "GET",
+        credentials: "include",
         headers,
         body: options.body === undefined ? undefined : JSON.stringify(options.body),
         signal: options.signal,
@@ -154,8 +166,17 @@ export class BeeexyApiClient {
         ? expectedStatus.includes(response.status)
         : response.status === expectedStatus;
     if (!response.ok || !expected) {
-      throw await createApiError(response);
+      const error = await createApiError(response);
+      if (isPrivateAccessRequiredError(error)) notifyPrivateAccessRequired();
+      throw error;
     }
+  }
+
+  private async throwIfPrivateAccessRequired(response: Response) {
+    const error = await createApiError(response.clone());
+    if (!isPrivateAccessRequiredError(error)) return;
+    notifyPrivateAccessRequired();
+    throw error;
   }
 }
 

@@ -718,6 +718,35 @@ textarea { min-height: 112px; resize: vertical; line-height: 1.5; }
 .auth-bootstrap-error .entry-primary-button { max-width: 330px; margin-top: 25px; }
 .auth-bootstrap-error .text-button { margin-top: 5px; }
 
+/* Private demo access */
+.private-access-shell { overflow-y: auto; }
+.private-access-ambient::before { top: -31%; width: min(110vw, 900px); background: radial-gradient(circle, rgba(67, 64, 232, .045), transparent 67%); }
+.private-access-stage { position: relative; z-index: 1; display: grid; width: min(100%, 560px); min-height: 100dvh; grid-template-rows: auto minmax(0, 1fr) auto; margin: 0 auto; padding: calc(24px + env(safe-area-inset-top)) 24px calc(20px + env(safe-area-inset-bottom)); }
+.private-access-header { display: flex; justify-content: center; }
+.private-access-panel { display: grid; align-self: center; margin: 28px 0; border: 1px solid rgba(15, 15, 20, .07); border-radius: 18px; padding: clamp(24px, 5vw, 38px); background: rgba(255, 255, 255, .92); box-shadow: 0 22px 60px rgba(30, 28, 90, .08); }
+.private-access-intro { display: grid; grid-template-columns: 54px minmax(0, 1fr); align-items: start; gap: 17px; }
+.private-access-symbol { display: grid; width: 54px; height: 54px; place-items: center; border-radius: 16px; color: var(--primary); background: var(--primary-soft); }
+.private-access-intro h1 { max-width: 390px; margin-top: 8px; font-size: clamp(27px, 5vw, 36px); font-weight: 600; line-height: 1.12; letter-spacing: -.045em; text-wrap: balance; }
+.private-access-intro div > p:last-child { max-width: 380px; margin-top: 11px; color: var(--ink-2); font-size: 14px; font-weight: 300; line-height: 1.55; }
+.private-access-form { display: grid; gap: 14px; margin-top: 30px; }
+.private-access-field { display: grid; gap: 7px; }
+.private-access-field label { color: var(--ink); font-family: var(--font-display); font-size: 12px; font-weight: 600; }
+.private-access-field .entry-input { color: #747488; }
+.private-access-field .entry-input:focus-within { color: var(--primary); }
+.private-access-field input { width: 100%; min-width: 0; color: var(--ink); }
+.private-access-feedback-slot { min-height: 56px; }
+.private-access-feedback { display: grid; min-height: 50px; grid-template-columns: 20px minmax(0, 1fr); align-items: start; gap: 9px; border-radius: 12px; padding: 11px 12px; color: #8f2020; background: var(--red-soft); font-size: 11px; line-height: 1.48; }
+.private-access-feedback svg { margin-top: 1px; }
+.private-access-feedback.temporary, .private-access-feedback.expired, .private-access-feedback.rate-limit { color: #71420f; background: var(--amber-soft); }
+.private-access-feedback span { font-weight: 600; }
+.private-access-retry { min-height: 44px; margin-top: -8px; border: 0; border-radius: 12px; padding: 8px 12px; color: var(--primary); background: transparent; font-family: var(--font-display); font-size: 12px; font-weight: 600; transition: background var(--duration-fast), transform var(--duration-fast); }
+.private-access-retry:hover { background: var(--primary-soft); }
+.private-access-retry:active { transform: scale(.98); }
+.private-access-footer { display: flex; max-width: 410px; align-items: flex-start; justify-self: center; gap: 7px; color: var(--ink-2); text-align: left; }
+.private-access-footer svg { flex: 0 0 auto; margin-top: 1px; color: var(--primary); }
+.private-access-footer p { font-size: 10.5px; line-height: 1.45; }
+.private-access-loading p { margin-top: -10px; color: var(--ink-2); font-size: 11px; }
+
 @keyframes entryStepIn { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes entryLoading { 0% { transform: scaleX(0); transform-origin: left; } 45% { transform: scaleX(1); transform-origin: left; } 55% { transform: scaleX(1); transform-origin: right; } 100% { transform: scaleX(0); transform-origin: right; } }
 
@@ -731,6 +760,11 @@ textarea { min-height: 112px; resize: vertical; line-height: 1.5; }
   .onboarding-copy > p:last-child { font-size: 14px; }
   .login-stage { padding-right: 20px; padding-left: 20px; }
   .login-content { padding-top: clamp(30px, 7vh, 54px); }
+  .private-access-stage { padding-right: 16px; padding-left: 16px; }
+  .private-access-panel { margin: 22px 0; border: 0; padding: 24px 4px; background: transparent; box-shadow: none; }
+  .private-access-intro { grid-template-columns: 46px minmax(0, 1fr); gap: 13px; }
+  .private-access-symbol { width: 46px; height: 46px; border-radius: 14px; }
+  .private-access-intro h1 { font-size: clamp(27px, 8vw, 34px); }
 }
 
 @media (max-width: 350px) {
@@ -741,6 +775,9 @@ textarea { min-height: 112px; resize: vertical; line-height: 1.5; }
   .onboarding-copy h1 { font-size: 27px; }
   .onboarding-copy > p:last-child { font-size: 13.5px; line-height: 1.52; }
   .login-heading h1 { font-size: 29px; }
+  .private-access-stage { padding-right: 14px; padding-left: 14px; }
+  .private-access-intro { grid-template-columns: 1fr; }
+  .private-access-intro h1 { font-size: 27px; }
 }
 
 @media (max-height: 690px) {

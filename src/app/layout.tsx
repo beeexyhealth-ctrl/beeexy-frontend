@@ -4,6 +4,7 @@ import { AuthProvider } from "@/features/auth/auth-provider";
 import { AuthRouteBoundary } from "@/features/auth/auth-route-boundary";
 import { PatientProvider } from "@/features/my-circle/patient-provider";
 import { PreTriageProvider } from "@/features/pre-triage/pre-triage-provider";
+import { PrivateAccessProvider } from "@/features/private-access/private-access-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -23,5 +24,5 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body><ServiceWorkerRegister /><AuthProvider><PatientProvider><PreTriageProvider><AuthRouteBoundary>{children}</AuthRouteBoundary></PreTriageProvider></PatientProvider></AuthProvider></body></html>;
+  return <html lang="en"><body><ServiceWorkerRegister /><PrivateAccessProvider><AuthProvider><PatientProvider><PreTriageProvider><AuthRouteBoundary>{children}</AuthRouteBoundary></PreTriageProvider></PatientProvider></AuthProvider></PrivateAccessProvider></body></html>;
 }
