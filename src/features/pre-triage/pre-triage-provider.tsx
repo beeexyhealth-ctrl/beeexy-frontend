@@ -14,6 +14,7 @@ import type {
   PreTriagePathway,
   QuestionnaireProgress,
   StructuredPreTriageAnswers,
+  StartPreTriageFromIntakeResponse,
   SubmitPreTriageAnswersRequest,
 } from "@/lib/beeexy-api/contracts";
 import { beeexyPhase4Api, type PreTriageAccess } from "@/lib/beeexy-api/phase-4-api";
@@ -26,7 +27,7 @@ import {
 } from "./pre-triage-storage";
 
 export type PreTriageMode = "anonymous" | "authenticated";
-export type PreTriageOperation = "starting" | "answering" | "completing" | "loading-conversation" | "loading-result" | "claiming" | null;
+export type PreTriageOperation = "starting" | "intaking" | "answering" | "completing" | "loading-conversation" | "loading-result" | "claiming" | null;
 
 export interface ActivePreTriage {
   sessionId: string;
@@ -41,6 +42,8 @@ export interface ActivePreTriage {
   result?: NeutralPreTriageResult;
   pendingClaim: boolean;
   lastAnswerResponse?: PreTriageAnswerResponse;
+  /** In-memory only; never written to anonymous flow storage. */
+  transientUserTurn?: string;
 }
 
 type ActivePreTriageInternal = ActivePreTriage & { anonymousCapability?: string };
@@ -60,6 +63,7 @@ type PreTriageContextValue = {
   loadResult(sessionId: string): Promise<NeutralPreTriageResult>;
   loadConversation(sessionId: string, signal?: AbortSignal): Promise<PreTriageConversationProjection>;
   markPendingClaim(): string;
+  startFromIntake(text: string, idempotencyKey: string, mode: PreTriageMode, signal?: AbortSignal): Promise<StartPreTriageFromIntakeResponse>;
   start(pathway: PreTriagePathway, mode: PreTriageMode, patient?: AccessiblePatient | null): Promise<ActivePreTriage>;
   submit(request: SubmitPreTriageAnswersRequest): Promise<PreTriageAnswerResponse>;
 };
@@ -144,7 +148,13 @@ export function PreTriageProvider({ children }: { children: React.ReactNode }) {
         ...(mode === "authenticated" && patient?.accessType === "Managed" ? { patientId: patient.profileId } : {}),
       };
       const response = await beeexyPhase4Api.startPreTriage(request, mode);
-      if (mode === "anonymous" && !("anonymousCapability" in response)) throw new BeeexyApiError(500);
+      const anonymousCapability = "anonymousCapability" in response ? response.anonymousCapability : undefined;
+      if (mode === "anonymous" && !anonymousCapability) throw new BeeexyApiError(500);
+      const access: PreTriageAccess = mode === "anonymous"
+        ? { mode: "anonymous", capability: requireCapability(anonymousCapability) }
+        : { mode: "authenticated" };
+      const conversation = response.conversation
+        ?? await beeexyPhase4Api.getPreTriageConversation(response.sessionId, access);
       const next: ActivePreTriageInternal = {
         sessionId: response.sessionId,
         mode,
@@ -152,11 +162,11 @@ export function PreTriageProvider({ children }: { children: React.ReactNode }) {
         patientId: mode === "authenticated" ? response.patientId : undefined,
         questionnaireVersion: response.questionnaire.version,
         expiresAt: response.expiresAt,
-        progression: progressionFromConversation(response.conversation),
-        conversation: response.conversation,
-        acceptedAnswers: response.conversation.acceptedValues,
+        progression: progressionFromConversation(conversation),
+        conversation,
+        acceptedAnswers: conversation.acceptedValues,
         pendingClaim: false,
-        anonymousCapability: mode === "anonymous" ? response.anonymousCapability : undefined,
+        anonymousCapability: mode === "anonymous" ? anonymousCapability : undefined,
       };
       if (mode === "anonymous") clearAnonymousPreTriage();
       persist(next);
@@ -165,6 +175,58 @@ export function PreTriageProvider({ children }: { children: React.ReactNode }) {
       return publicState(next);
     } catch (caught) {
       await handleFailure(caught, active);
+      throw caught;
+    } finally {
+      finish();
+    }
+  }, [active, authStatus, begin, finish, handleFailure, persist]);
+
+  const startFromIntake = useCallback(async (
+    text: string,
+    idempotencyKey: string,
+    mode: PreTriageMode,
+    signal?: AbortSignal,
+  ) => {
+    begin("intaking");
+    try {
+      if (mode === "authenticated" && authStatus !== "authenticated") throw new BeeexyApiError(401);
+      const response = await beeexyPhase4Api.startPreTriageFromIntake(
+        { text },
+        { mode },
+        idempotencyKey,
+        signal,
+      );
+      if (response.resolution !== "RESOLVED") return response;
+
+      const { session } = response;
+      const anonymousCapability = "anonymousCapability" in session ? session.anonymousCapability : undefined;
+      if (mode === "anonymous" && !anonymousCapability) throw new BeeexyApiError(500);
+      const access: PreTriageAccess = mode === "anonymous"
+        ? { mode: "anonymous", capability: requireCapability(anonymousCapability) }
+        : { mode: "authenticated" };
+      const conversation = response.conversation
+        ?? await beeexyPhase4Api.getPreTriageConversation(session.sessionId, access, signal);
+      const next: ActivePreTriageInternal = {
+        sessionId: session.sessionId,
+        mode,
+        pathway: conversation.pathway.code,
+        patientId: mode === "authenticated" ? session.patientId : undefined,
+        questionnaireVersion: conversation.questionnaire.version,
+        expiresAt: conversation.expiresAt,
+        progression: progressionFromConversation(conversation),
+        conversation,
+        acceptedAnswers: conversation.acceptedValues,
+        pendingClaim: false,
+        anonymousCapability: mode === "anonymous" ? anonymousCapability : undefined,
+        transientUserTurn: text,
+      };
+      if (mode === "anonymous") clearAnonymousPreTriage();
+      persist(next);
+      setClaimConfirmation(null);
+      setClaimRecovered(false);
+      return { ...response, conversation };
+    } catch (caught) {
+      if (!(caught instanceof Error && caught.name === "AbortError")) await handleFailure(caught, active);
       throw caught;
     } finally {
       finish();
@@ -224,6 +286,7 @@ export function PreTriageProvider({ children }: { children: React.ReactNode }) {
         result: current?.result,
         pendingClaim: current?.pendingClaim || false,
         anonymousCapability: current?.anonymousCapability,
+        transientUserTurn: current?.transientUserTurn,
       };
       persist(next);
       return conversation;
@@ -364,8 +427,9 @@ export function PreTriageProvider({ children }: { children: React.ReactNode }) {
     loadConversation,
     markPendingClaim,
     start,
+    startFromIntake,
     submit,
-  }), [active, error, hydrated, operation, claimConfirmation, claimRecovered, pendingClaimRoute, abandon, claim, complete, loadConversation, loadResult, markPendingClaim, start, submit]);
+  }), [active, error, hydrated, operation, claimConfirmation, claimRecovered, pendingClaimRoute, abandon, claim, complete, loadConversation, loadResult, markPendingClaim, start, startFromIntake, submit]);
 
   return <PreTriageContext.Provider value={value}>{children}</PreTriageContext.Provider>;
 }
@@ -390,6 +454,11 @@ function accessFor(active: ActivePreTriageInternal): PreTriageAccess {
   return { mode: "anonymous", capability: active.anonymousCapability };
 }
 
+function requireCapability(capability: string | undefined) {
+  if (!capability) throw new BeeexyApiError(500);
+  return capability;
+}
+
 function publicState(active: ActivePreTriageInternal): ActivePreTriage {
   return {
     sessionId: active.sessionId,
@@ -404,6 +473,7 @@ function publicState(active: ActivePreTriageInternal): ActivePreTriage {
     result: active.result,
     pendingClaim: active.pendingClaim,
     lastAnswerResponse: active.lastAnswerResponse,
+    transientUserTurn: active.transientUserTurn,
   };
 }
 

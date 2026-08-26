@@ -7,7 +7,11 @@ import type {
   PreTriageConversationProjection,
   PreTriageSessionStartResponse,
 } from "@/lib/beeexy-api/contracts";
-import { BeeexyPhase4Api, PRE_TRIAGE_CAPABILITY_HEADER } from "@/lib/beeexy-api/phase-4-api";
+import {
+  BeeexyPhase4Api,
+  PRE_TRIAGE_CAPABILITY_HEADER,
+  PRE_TRIAGE_IDEMPOTENCY_HEADER,
+} from "@/lib/beeexy-api/phase-4-api";
 import { BeeexyApiError } from "@/lib/beeexy-api/problem-details";
 import type { BeeexySession, SessionStore } from "@/lib/beeexy-api/session-storage";
 
@@ -149,6 +153,53 @@ describe("Beeexy Phase 4 API contract", () => {
     const init = fetcher.mock.calls[0][1];
     expect(JSON.parse(String(init?.body))).toEqual({ pathway: "HEADACHE", patientId: "managed-2" });
     expect((init?.headers as Headers).get("Authorization")).toBe("Bearer access-a");
+  });
+
+  it("submits anonymous free-text intake with the exact body, durable key, cookies, and no Bearer", async () => {
+    const response = { resolution: "UNRESOLVED" as const };
+    const fetcher = vi.fn<TestFetch>(async () => json(response));
+
+    await expect(createApi(fetcher, new MemoryStore(null)).startPreTriageFromIntake(
+      { text: "My stomach has hurt for two days." },
+      { mode: "anonymous" },
+      "intake-operation-k1",
+    )).resolves.toEqual(response);
+
+    const [url, init] = fetcher.mock.calls[0];
+    const headers = init?.headers as Headers;
+    expect(url).toBe(`${baseUrl}/api/v1/pre-triage/intake`);
+    expect(init?.method).toBe("POST");
+    expect(init?.credentials).toBe("include");
+    expect(JSON.parse(String(init?.body))).toEqual({ text: "My stomach has hurt for two days." });
+    expect(Object.keys(JSON.parse(String(init?.body)))).toEqual(["text"]);
+    expect(headers.get(PRE_TRIAGE_IDEMPOTENCY_HEADER)).toBe("intake-operation-k1");
+    expect(headers.get("Authorization")).toBeNull();
+    expect(headers.get(PRE_TRIAGE_CAPABILITY_HEADER)).toBeNull();
+  });
+
+  it("keeps the same intake key and body through authenticated refresh and never places text in the URL", async () => {
+    const store = new MemoryStore();
+    let intakeCalls = 0;
+    const response = { resolution: "AMBIGUOUS" as const, candidatePathways: ["HEADACHE" as const, "CHEST_PAIN" as const] };
+    const fetcher = vi.fn<TestFetch>(async (input) => {
+      if (String(input).endsWith("/auth/refresh")) return json(refreshed);
+      intakeCalls += 1;
+      return intakeCalls === 1 ? json({ status: 401 }, 401) : json(response);
+    });
+
+    await expect(createApi(fetcher, store).startPreTriageFromIntake(
+      { text: "Pain in my head or chest" },
+      { mode: "authenticated" },
+      "intake-operation-k2",
+    )).resolves.toEqual(response);
+
+    const intakeRequests = fetcher.mock.calls.filter(([url]) => String(url).endsWith("/api/v1/pre-triage/intake"));
+    expect(intakeRequests).toHaveLength(2);
+    for (const [url, init] of intakeRequests) {
+      expect(String(url)).not.toContain("Pain");
+      expect(JSON.parse(String(init?.body))).toEqual({ text: "Pain in my head or chest" });
+      expect((init?.headers as Headers).get(PRE_TRIAGE_IDEMPOTENCY_HEADER)).toBe("intake-operation-k2");
+    }
   });
 
   it("submits anonymous answers with capability, no Bearer, and the exact natural-language body", async () => {

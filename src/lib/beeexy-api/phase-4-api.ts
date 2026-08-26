@@ -6,15 +6,22 @@ import type {
   PreTriageAnswerResponse,
   PreTriageConversationProjection,
   PreTriageSessionStartResponse,
+  StartPreTriageFromIntakeRequest,
+  StartPreTriageFromIntakeResponse,
   StartPreTriageRequest,
   SubmitPreTriageAnswersRequest,
 } from "./contracts";
 
 export const PRE_TRIAGE_CAPABILITY_HEADER = "X-Pre-Triage-Capability";
+export const PRE_TRIAGE_IDEMPOTENCY_HEADER = "Idempotency-Key";
 
 export type PreTriageAccess =
   | { mode: "authenticated" }
   | { mode: "anonymous"; capability: string };
+
+export type PreTriageIntakeAccess =
+  | { mode: "authenticated" }
+  | { mode: "anonymous"; capability?: string };
 
 export class BeeexyPhase4Api {
   constructor(private readonly client: BeeexyApiClient) {}
@@ -32,6 +39,31 @@ export class BeeexyPhase4Api {
       body: request,
       expectedStatus: 201,
     });
+  }
+
+  startPreTriageFromIntake(
+    request: StartPreTriageFromIntakeRequest,
+    access: PreTriageIntakeAccess,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ) {
+    const headers = {
+      [PRE_TRIAGE_IDEMPOTENCY_HEADER]: idempotencyKey,
+      ...(access.mode === "anonymous" && access.capability
+        ? capabilityHeaders(access.capability)
+        : {}),
+    };
+    const options = {
+      method: "POST" as const,
+      body: request,
+      headers,
+      expectedStatus: [200, 201],
+      signal,
+    };
+    if (access.mode === "anonymous") {
+      return this.client.requestPublic<StartPreTriageFromIntakeResponse>("/api/v1/pre-triage/intake", options);
+    }
+    return this.client.requestAuthenticated<StartPreTriageFromIntakeResponse>("/api/v1/pre-triage/intake", options);
   }
 
   submitPreTriageAnswers(sessionId: string, request: SubmitPreTriageAnswersRequest, access: PreTriageAccess) {

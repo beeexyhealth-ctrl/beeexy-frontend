@@ -265,7 +265,7 @@ export interface StartPreTriageRequest {
   patientId?: Uuid;
 }
 
-interface PreTriageSessionStartCommon {
+interface PreTriageSessionCommon {
   sessionId: Uuid;
   pathway: PreTriagePathway;
   status: "Active";
@@ -273,12 +273,19 @@ interface PreTriageSessionStartCommon {
   questionnaire: ClinicalDefinitionReference;
   ruleSet: ClinicalDefinitionReference;
   clinicalContent: ClinicalContentStatus;
+}
+
+interface PreTriageSessionStartCommon extends PreTriageSessionCommon {
   conversation: PreTriageConversationProjection;
 }
 
 export type PreTriageSessionStartResponse =
   | (PreTriageSessionStartCommon & { patientId?: never; anonymousCapability: string })
   | (PreTriageSessionStartCommon & { patientId: Uuid; anonymousCapability?: never });
+
+export interface StartPreTriageFromIntakeRequest {
+  text: string;
+}
 
 export interface DurationAnswer {
   value: number;
@@ -354,6 +361,35 @@ export interface PreTriageAnswerResponse {
   conversation: PreTriageConversationProjection;
   clarification?: IntakeClarification;
 }
+
+export type PreTriageIntakeSessionResponse =
+  | (PreTriageSessionCommon & { patientId?: never; anonymousCapability: string })
+  | (PreTriageSessionCommon & { patientId: Uuid; anonymousCapability?: never });
+
+export type PreTriageIntakeInitialAnswers = Omit<PreTriageAnswerResponse, "conversation">;
+
+export type StartPreTriageFromIntakeResponse =
+  | {
+      resolution: "RESOLVED";
+      candidatePathways?: never;
+      session: PreTriageIntakeSessionResponse;
+      initialAnswers: PreTriageIntakeInitialAnswers;
+      conversation: PreTriageConversationProjection;
+    }
+  | {
+      resolution: "AMBIGUOUS";
+      candidatePathways?: PreTriagePathway[];
+      session?: never;
+      initialAnswers?: never;
+      conversation?: never;
+    }
+  | {
+      resolution: "UNRESOLVED";
+      candidatePathways?: never;
+      session?: never;
+      initialAnswers?: never;
+      conversation?: never;
+    };
 
 export interface NeutralPreTriageResult {
   sessionId: Uuid;

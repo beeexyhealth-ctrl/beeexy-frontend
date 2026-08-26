@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { FlowFrame } from "@/components/layout/flow-frame";
 import { useAuth } from "@/features/auth/auth-provider";
@@ -11,22 +11,34 @@ import { usePreTriage } from "@/features/pre-triage/pre-triage-provider";
 import type { PreTriagePathway } from "@/lib/beeexy-api/contracts";
 import { BeeexyApiError, BeeexyNetworkError } from "@/lib/beeexy-api/problem-details";
 import { ChatPreTriageShell, ConversationHeader, type ChatShellError } from "./chat-shell";
+import { useChatIntake } from "./use-chat-intake";
 
 export function PreTriageChatStartScreen() {
   const router = useRouter();
   const { status: authStatus } = useAuth();
   const { activePatient, bootstrapStatus, patients, selectActivePatient } = usePatients();
-  const { abandon, active, clearError, error, hydrated, operation, start } = usePreTriage();
+  const { abandon, active, clearError, error, hydrated, operation, start, startFromIntake } = usePreTriage();
   const [startingPathway, setStartingPathway] = useState<PreTriagePathway | null>(null);
   const [selectedPatientId, setSelectedPatientId] = useState(activePatient?.profileId || "");
+  const pathwayInFlightRef = useRef(false);
 
   const mode = authStatus === "authenticated" ? "authenticated" : "anonymous";
   const resolvedPatientId = selectedPatientId || activePatient?.profileId || "";
   const selectedPatient = patients.find((patient) => patient.profileId === resolvedPatientId) || activePatient;
   const loading = !hydrated || authStatus === "bootstrapping" || (mode === "authenticated" && bootstrapStatus === "loading");
+  const intakeAllowed = mode === "anonymous" || selectedPatient?.accessType === "Primary";
+
+  const executeIntake = useCallback((text: string, idempotencyKey: string, signal: AbortSignal) => (
+    startFromIntake(text, idempotencyKey, mode, signal)
+  ), [mode, startFromIntake]);
+  const enterResolvedSession = useCallback((response: { session: { sessionId: string } }) => {
+    router.push(`/pre-triage/${encodeURIComponent(response.session.sessionId)}`);
+  }, [router]);
+  const intake = useChatIntake({ execute: executeIntake, onResolved: enterResolvedSession });
 
   async function choosePathway(pathway: PreTriagePathway) {
-    if (operation || startingPathway) return;
+    if (operation || startingPathway || pathwayInFlightRef.current) return;
+    pathwayInFlightRef.current = true;
     clearError();
     setStartingPathway(pathway);
     try {
@@ -34,6 +46,8 @@ export function PreTriageChatStartScreen() {
       router.push(`/pre-triage/${encodeURIComponent(session.sessionId)}`);
     } catch {
       setStartingPathway(null);
+    } finally {
+      pathwayInFlightRef.current = false;
     }
   }
 
@@ -63,6 +77,7 @@ export function PreTriageChatStartScreen() {
       <label htmlFor="chat-pretriage-patient">Who is this for?</label>
       <select
         id="chat-pretriage-patient"
+        disabled={Boolean(startingPathway) || intake.state.kind !== "idle"}
         value={resolvedPatientId}
         onChange={(event) => {
           setSelectedPatientId(event.target.value);
@@ -83,8 +98,20 @@ export function PreTriageChatStartScreen() {
       <ChatPreTriageShell
         backHref={mode === "anonymous" ? "/login" : "/home"}
         contextControl={contextControl}
-        error={error ? chatShellError(error) : null}
+        entryState={intake.state}
+        error={error && intake.state.kind === "idle" ? chatShellError(error) : null}
+        initialComposerDisabled={!intakeAllowed}
+        initialComposerHint={!intakeAllowed
+          ? "For a managed profile, choose one of the supported symptoms."
+          : undefined}
         loading={loading}
+        onCandidateSelect={selectedPatient || mode === "anonymous" ? choosePathway : undefined}
+        onComposerSubmit={intakeAllowed ? intake.submit : undefined}
+        onEntryReset={() => {
+          clearError();
+          intake.reset();
+        }}
+        onEntryRetry={intake.retry}
         onPathwaySelect={selectedPatient || mode === "anonymous" ? choosePathway : undefined}
         onRetry={() => {
           clearError();
@@ -140,6 +167,7 @@ export function PreTriageChatSessionScreen() {
         projection={projection}
         reviewHref={`/pre-triage/${encodeURIComponent(sessionId)}/review`}
         resultHref={`/pre-triage/${encodeURIComponent(sessionId)}/result`}
+        transientUserTurn={active?.sessionId === sessionId ? active.transientUserTurn : undefined}
       />
     </FlowFrame>
   );

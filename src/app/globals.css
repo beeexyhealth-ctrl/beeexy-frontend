@@ -612,9 +612,12 @@ textarea { min-height: 112px; resize: vertical; line-height: 1.5; }
 .chat-turn.user .chat-message-bubble { color: #fff; background: var(--primary); }
 .chat-interaction-panel { display: grid; gap: 9px; margin-top: 3px; }
 .chat-interaction-note { color: var(--ink-2); font-size: 11.5px; line-height: 1.5; }
+.chat-processing { width: fit-content; margin-top: 2px; color: var(--ink-2); font-size: 11px; line-height: 1.45; }
+.chat-processing::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: var(--primary); animation: chatProcessing 1.1s ease-in-out infinite; }
 .chat-quick-replies { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .chat-quick-reply { display: flex; min-height: 48px; min-width: 0; align-items: center; justify-content: space-between; gap: 6px; border: 1px solid var(--primary-line); border-radius: 13px; padding: 10px 11px; color: var(--primary); text-align: left; background: #fff; transition: border-color var(--duration-fast), background var(--duration-fast), transform var(--duration-fast); }
 .chat-quick-reply:last-child { grid-column: 1 / -1; }
+.chat-quick-replies.compact .chat-quick-reply:last-child { grid-column: auto; }
 .chat-quick-reply:hover { border-color: var(--primary); background: var(--primary-soft); }
 .chat-quick-reply:active { transform: scale(.98); }
 .chat-quick-reply:disabled { opacity: .55; transform: none; }
@@ -647,6 +650,7 @@ textarea { min-height: 112px; resize: vertical; line-height: 1.5; }
 .chat-resume-state { min-height: 0; flex: 1; align-content: center; }
 .chat-resume-state .button + .button { margin-top: -1px; }
 @keyframes chatSkeleton { 50% { background: var(--primary-line); } }
+@keyframes chatProcessing { 50% { opacity: .28; } }
 
 @media (max-width: 350px) {
   .chat-conversation-header { padding-right: 14px; padding-left: 14px; }
@@ -659,7 +663,7 @@ textarea { min-height: 112px; resize: vertical; line-height: 1.5; }
 
 @media (prefers-reduced-motion: reduce) {
   .chat-progress-track > span, .chat-quick-reply, .chat-send-button { transition: none; }
-  .chat-skeleton, .chat-skeleton-lines div { animation: none; }
+  .chat-skeleton, .chat-skeleton-lines div, .chat-processing::before { animation: none; }
 }
 
 /* Public entry flow */

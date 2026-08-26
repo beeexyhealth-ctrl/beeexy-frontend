@@ -3,6 +3,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  CHAT_PATHWAYS,
   ChatPreTriageShell,
   type ChatShellError,
 } from "@/features/pre-triage-chat/chat-shell";
@@ -39,6 +40,16 @@ const projection: PreTriageConversationProjection = {
 afterEach(cleanup);
 
 describe("Chat Pre-Triage shell", () => {
+  it("keeps the exact quick-reply label to canonical pathway mapping", () => {
+    expect(CHAT_PATHWAYS).toEqual([
+      { code: "HEADACHE", label: "Headache" },
+      { code: "ABDOMINAL_PAIN", label: "Stomach pain" },
+      { code: "CHEST_PAIN", label: "Chest pain" },
+      { code: "FEVER", label: "Fever" },
+      { code: "OTHER_SYMPTOMS", label: "Other" },
+    ]);
+  });
+
   it("renders the greeting, exactly five pathway quick replies, and composer shell", () => {
     render(<ChatPreTriageShell backHref="/home" onPathwaySelect={vi.fn()} />);
 
@@ -53,6 +64,128 @@ describe("Chat Pre-Triage shell", () => {
     ]);
     expect(screen.getByRole("form", { name: "Message Beeexy" })).toBeInTheDocument();
     expect(screen.getByLabelText("Describe what you are experiencing")).toBeInTheDocument();
+  });
+
+  it("maps quick-reply labels to canonical pathways and suppresses duplicate clicks while pending", () => {
+    let finish!: () => void;
+    const onPathwaySelect = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    render(<ChatPreTriageShell backHref="/home" onComposerSubmit={vi.fn()} onPathwaySelect={onPathwaySelect} />);
+
+    const stomachPain = screen.getByRole("button", { name: /stomach pain/i });
+    fireEvent.click(stomachPain);
+    fireEvent.click(stomachPain);
+
+    expect(onPathwaySelect).toHaveBeenCalledOnce();
+    expect(onPathwaySelect).toHaveBeenCalledWith("ABDOMINAL_PAIN");
+    finish();
+  });
+
+  it("stages the readable quick-reply turn while deterministic start is pending", () => {
+    render(
+      <ChatPreTriageShell
+        backHref="/home"
+        onPathwaySelect={vi.fn()}
+        startingPathway="ABDOMINAL_PAIN"
+      />,
+    );
+
+    expect(screen.getByRole("article", { name: "You" })).toHaveTextContent("Stomach pain");
+    expect(screen.getByRole("status")).toHaveTextContent("Processing your response");
+    expect(screen.queryByText("ABDOMINAL_PAIN")).not.toBeInTheDocument();
+  });
+
+  it("enforces composer keyboard, whitespace, and 4,000-character behavior", () => {
+    const onSubmit = vi.fn();
+    render(<ChatPreTriageShell backHref="/home" onComposerSubmit={onSubmit} onPathwaySelect={vi.fn()} />);
+    const composer = screen.getByLabelText("Describe what you are experiencing");
+    const send = screen.getByRole("button", { name: "Send message" });
+
+    expect(composer).toHaveAttribute("maxlength", "4000");
+    fireEvent.change(composer, { target: { value: "   " } });
+    expect(send).toBeDisabled();
+
+    fireEvent.change(composer, { target: { value: "line one" } });
+    fireEvent.keyDown(composer, { key: "Enter", shiftKey: true });
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    const boundary = "a".repeat(4000);
+    fireEvent.change(composer, { target: { value: boundary } });
+    fireEvent.keyDown(composer, { key: "Enter" });
+    expect(onSubmit).toHaveBeenCalledWith(boundary);
+  });
+
+  it("suppresses duplicate Enter submission while the composer promise is pending", () => {
+    let finish!: () => void;
+    const onSubmit = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    render(<ChatPreTriageShell backHref="/home" onComposerSubmit={onSubmit} onPathwaySelect={vi.fn()} />);
+    const composer = screen.getByLabelText("Describe what you are experiencing");
+    fireEvent.change(composer, { target: { value: "My head hurts" } });
+
+    fireEvent.keyDown(composer, { key: "Enter" });
+    fireEvent.keyDown(composer, { key: "Enter" });
+
+    expect(onSubmit).toHaveBeenCalledOnce();
+    finish();
+  });
+
+  it("renders ambiguity and unavailable states in-conversation while keeping deterministic choices", () => {
+    const onCandidateSelect = vi.fn();
+    const onRetry = vi.fn();
+    const { rerender } = render(
+      <ChatPreTriageShell
+        backHref="/home"
+        entryState={{ kind: "ambiguous", text: "Pain around here", candidates: ["CHEST_PAIN", "HEADACHE"] }}
+        onCandidateSelect={onCandidateSelect}
+        onComposerSubmit={vi.fn()}
+        onPathwaySelect={vi.fn()}
+      />,
+    );
+
+    const clarification = screen.getByRole("region", { name: "Clarify the symptom" });
+    expect(within(clarification).getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "Chest pain",
+      "Headache",
+    ]);
+    expect(onCandidateSelect).not.toHaveBeenCalled();
+    fireEvent.click(within(clarification).getByRole("button", { name: /chest pain/i }));
+    expect(onCandidateSelect).toHaveBeenCalledWith("CHEST_PAIN");
+
+    rerender(
+      <ChatPreTriageShell
+        backHref="/home"
+        entryState={{
+          kind: "retryable",
+          text: "Pain around here",
+          idempotencyKey: "not-rendered",
+          reason: "unavailable",
+        }}
+        onComposerSubmit={vi.fn()}
+        onEntryRetry={onRetry}
+        onPathwaySelect={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/can't interpret that description right now/i)).toBeInTheDocument();
+    expect(screen.queryByText(/nvidia|nemotron|provider/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Choose a symptom" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Retry description" }));
+    expect(onRetry).toHaveBeenCalledOnce();
+  });
+
+  it("shows a safe 409 operation conflict without automatically offering same-operation retry", () => {
+    const onReset = vi.fn();
+    render(
+      <ChatPreTriageShell
+        backHref="/home"
+        entryState={{ kind: "conflict", text: "My head hurts", reason: "key-reused" }}
+        onEntryReset={onReset}
+        onPathwaySelect={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Retry description" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Start a new description" }));
+    expect(onReset).toHaveBeenCalledOnce();
+    expect(screen.queryByText("not-rendered")).not.toBeInTheDocument();
   });
 
   it("renders pathway, backend progress, and the authoritative next interaction without initial choices", () => {
@@ -70,6 +203,22 @@ describe("Chat Pre-Triage shell", () => {
 
     expect(screen.getByText("Backend supplied this exact additional symptom question")).toBeInTheDocument();
     expect(screen.queryByText(/how long/i)).not.toBeInTheDocument();
+  });
+
+  it("keeps the natural intake turn intact and renders only the backend next interaction", () => {
+    render(
+      <ChatPreTriageShell
+        backHref="/home"
+        onComposerSubmit={vi.fn()}
+        projection={projection}
+        transientUserTurn="My stomach has hurt for two days and it is a 6 out of 10."
+      />,
+    );
+
+    expect(screen.getByText("My stomach has hurt for two days and it is a 6 out of 10.")).toBeInTheDocument();
+    expect(screen.getByText("Backend supplied this exact additional symptom question")).toBeInTheDocument();
+    expect(screen.queryByText("2 days")).not.toBeInTheDocument();
+    expect(screen.queryByText("6 out of 10")).not.toBeInTheDocument();
   });
 
   it("renders READY_FOR_REVIEW with a handoff and no clinical input", () => {
