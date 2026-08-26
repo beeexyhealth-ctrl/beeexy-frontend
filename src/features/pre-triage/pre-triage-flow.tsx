@@ -25,7 +25,9 @@ import { usePreTriage } from "./pre-triage-provider";
 export const SUPPORTED_PATHWAYS: ReadonlyArray<{ code: PreTriagePathway; label: string; icon: IconName }> = [
   { code: "HEADACHE", label: "Headache", icon: "brain" },
   { code: "ABDOMINAL_PAIN", label: "Stomach pain", icon: "activity" },
+  { code: "CHEST_PAIN", label: "Chest pain", icon: "heart" },
   { code: "FEVER", label: "Fever", icon: "activity" },
+  { code: "OTHER_SYMPTOMS", label: "Other", icon: "message" },
 ];
 
 const DURATION_UNITS: DurationUnit[] = ["MINUTES", "HOURS", "DAYS", "WEEKS", "MONTHS"];

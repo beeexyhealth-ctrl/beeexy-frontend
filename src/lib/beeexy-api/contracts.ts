@@ -168,7 +168,12 @@ export interface UpdatePatientRequest {
 export type Uuid = string;
 export type IsoTimestamp = string;
 
-export type PreTriagePathway = "HEADACHE" | "ABDOMINAL_PAIN" | "FEVER";
+export type PreTriagePathway =
+  | "HEADACHE"
+  | "ABDOMINAL_PAIN"
+  | "CHEST_PAIN"
+  | "FEVER"
+  | "OTHER_SYMPTOMS";
 export type AdditionalSymptom = "NAUSEA" | "DIARRHEA" | "FEVER";
 export type DurationUnit = "MINUTES" | "HOURS" | "DAYS" | "WEEKS" | "MONTHS";
 export type RequiredAnswerCode = "DURATION" | "INTENSITY" | "ADDITIONAL_SYMPTOMS";
@@ -185,6 +190,76 @@ export interface ClinicalContentStatus {
   clinicalApproval: "NOT_CLINICALLY_APPROVED";
 }
 
+export type ConversationSessionStatus = "ACTIVE" | "COMPLETED";
+export type ConversationState = "IN_PROGRESS" | "READY_FOR_REVIEW" | "COMPLETED";
+export type ConversationInputType = "DURATION" | "SCALE" | "MULTI_SELECT";
+
+export interface ConversationPathway {
+  code: PreTriagePathway;
+  label: string;
+}
+
+export interface ConversationProgress {
+  completed: number;
+  total: number;
+  percentage: number;
+}
+
+export interface ConversationOption {
+  value: string;
+  label: string;
+}
+
+interface ConversationInteractionCommon {
+  questionCode: RequiredAnswerCode;
+  prompt: string;
+  required: boolean;
+  options: ConversationOption[];
+}
+
+export type ConversationNextInteraction =
+  | (ConversationInteractionCommon & {
+      field: "duration";
+      inputType: "DURATION";
+      constraints: {
+        minimum: number;
+        exclusiveMinimum: boolean;
+        allowedUnits: DurationUnit[];
+      };
+    })
+  | (ConversationInteractionCommon & {
+      field: "intensity";
+      inputType: "SCALE";
+      constraints: {
+        minimum: number;
+        maximum: number;
+        step: number;
+      };
+    })
+  | (ConversationInteractionCommon & {
+      field: "additionalSymptoms";
+      inputType: "MULTI_SELECT";
+      constraints: {
+        minimumSelections: number;
+        maximumSelections: number;
+        allowsEmptySelection: boolean;
+      };
+    });
+
+export interface PreTriageConversationProjection {
+  sessionId: Uuid;
+  sessionStatus: ConversationSessionStatus;
+  state: ConversationState;
+  expiresAt: IsoTimestamp;
+  pathway: ConversationPathway;
+  questionnaire: ClinicalDefinitionReference;
+  ruleSet: ClinicalDefinitionReference;
+  progress: ConversationProgress;
+  acceptedValues: StructuredPreTriageAnswers;
+  /** Omitted by the backend once the conversation is ready for review or completed. */
+  nextInteraction?: ConversationNextInteraction;
+}
+
 export interface StartPreTriageRequest {
   pathway: PreTriagePathway;
   patientId?: Uuid;
@@ -198,6 +273,7 @@ interface PreTriageSessionStartCommon {
   questionnaire: ClinicalDefinitionReference;
   ruleSet: ClinicalDefinitionReference;
   clinicalContent: ClinicalContentStatus;
+  conversation: PreTriageConversationProjection;
 }
 
 export type PreTriageSessionStartResponse =
@@ -275,6 +351,7 @@ export interface PreTriageAnswerResponse {
   acceptedAnswers: RequiredAnswerCode[];
   acceptedValues: StructuredPreTriageAnswers | null;
   progression: QuestionnaireProgress;
+  conversation: PreTriageConversationProjection;
   clarification?: IntakeClarification;
 }
 
@@ -283,7 +360,7 @@ export interface NeutralPreTriageResult {
   episodeId: Uuid;
   primarySymptom: {
     code: PreTriagePathway;
-    display: "Headache" | "Stomach pain" | "Fever";
+    display: "Headache" | "Stomach pain" | "Chest pain" | "Fever" | "Other symptoms";
   };
   duration: DurationAnswer;
   intensity: number;

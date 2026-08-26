@@ -4,6 +4,7 @@ import type {
   AuthenticationResponse,
   NeutralPreTriageResult,
   PreTriageAnswerResponse,
+  PreTriageConversationProjection,
   PreTriageSessionStartResponse,
 } from "@/lib/beeexy-api/contracts";
 import { BeeexyPhase4Api, PRE_TRIAGE_CAPABILITY_HEADER } from "@/lib/beeexy-api/phase-4-api";
@@ -32,6 +33,27 @@ const refreshed: AuthenticationResponse = {
   account: session.account,
 };
 
+const commonConversation: PreTriageConversationProjection = {
+    sessionId,
+    sessionStatus: "ACTIVE",
+    state: "IN_PROGRESS",
+    expiresAt: "2099-01-02T00:00:00Z",
+    pathway: { code: "HEADACHE", label: "Headache" },
+    questionnaire: { code: "headache-demo-questionnaire", version: questionnaireVersion },
+    ruleSet: { code: "headache-demo-neutral-rules", version: questionnaireVersion },
+    progress: { completed: 0, total: 3, percentage: 0 },
+    acceptedValues: {},
+    nextInteraction: {
+      field: "duration",
+      questionCode: "DURATION",
+      prompt: "How long ago did the headache start?",
+      inputType: "DURATION",
+      required: true,
+      constraints: { minimum: 0, exclusiveMinimum: true, allowedUnits: ["MINUTES", "HOURS", "DAYS", "WEEKS", "MONTHS"] },
+      options: [],
+    },
+};
+
 const commonStart = {
   sessionId,
   pathway: "HEADACHE" as const,
@@ -40,6 +62,7 @@ const commonStart = {
   questionnaire: { code: "headache-demo-questionnaire", version: questionnaireVersion },
   ruleSet: { code: "headache-demo-neutral-rules", version: questionnaireVersion },
   clinicalContent: { source: "PRODUCT_DEMO_DEFINED" as const, reviewStatus: "NOT_APPLICABLE" as const, clinicalApproval: "NOT_CLINICALLY_APPROVED" as const },
+  conversation: commonConversation,
 };
 
 const answerResponse: PreTriageAnswerResponse = {
@@ -59,6 +82,17 @@ const answerResponse: PreTriageAnswerResponse = {
     missingRequiredFields: ["INTENSITY", "ADDITIONAL_SYMPTOMS"],
     nextQuestion: { code: "INTENSITY", prompt: "Backend intensity prompt", answerType: "INTEGER_SCALE", allowedValues: [], allowedUnits: [], minimum: 1, maximum: 10 },
     readyToComplete: false,
+  },
+  conversation: {
+    ...commonConversation,
+    state: "READY_FOR_REVIEW",
+    progress: { completed: 3, total: 3, percentage: 100 },
+    acceptedValues: {
+      duration: { value: 1, unit: "MONTHS" },
+      intensity: 3,
+      additionalSymptoms: ["NAUSEA"],
+    },
+    nextInteraction: undefined,
   },
 };
 
@@ -153,6 +187,21 @@ describe("Beeexy Phase 4 API contract", () => {
     expect(fetcher.mock.calls[0][1]?.method).toBe("GET");
     expect((fetcher.mock.calls[0][1]?.headers as Headers).get(PRE_TRIAGE_CAPABILITY_HEADER)).toBe(capability);
     expect(fetcher.mock.calls[0][1]?.body).toBeUndefined();
+  });
+
+  it("loads the exact conversation projection route with anonymous capability", async () => {
+    const fetcher = vi.fn<TestFetch>(async () => json(commonConversation));
+
+    await expect(createApi(fetcher, new MemoryStore(null)).getPreTriageConversation(
+      sessionId,
+      { mode: "anonymous", capability },
+    )).resolves.toEqual(commonConversation);
+
+    const [url, init] = fetcher.mock.calls[0];
+    expect(url).toBe(`${baseUrl}/api/v1/pre-triage/sessions/${sessionId}/conversation`);
+    expect(init?.method).toBe("GET");
+    expect((init?.headers as Headers).get(PRE_TRIAGE_CAPABILITY_HEADER)).toBe(capability);
+    expect((init?.headers as Headers).get("Authorization")).toBeNull();
   });
 
   it("claims with Bearer plus capability, no body/query/patient selector", async () => {

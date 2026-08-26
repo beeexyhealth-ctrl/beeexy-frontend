@@ -4,6 +4,7 @@ import type {
   ClaimAnonymousPreTriageResponse,
   CompletePreTriageResponse,
   PreTriageAnswerResponse,
+  PreTriageConversationProjection,
   PreTriageSessionStartResponse,
   StartPreTriageRequest,
   SubmitPreTriageAnswersRequest,
@@ -76,6 +77,21 @@ export class BeeexyPhase4Api {
     return this.client.requestAuthenticated<CompletePreTriageResponse>(path, { expectedStatus: 200 });
   }
 
+  getPreTriageConversation(sessionId: string, access: PreTriageAccess, signal?: AbortSignal) {
+    const path = sessionPath(sessionId, "conversation");
+    if (access.mode === "anonymous") {
+      return this.client.requestPublic<PreTriageConversationProjection>(path, {
+        headers: capabilityHeaders(access.capability),
+        expectedStatus: 200,
+        signal,
+      });
+    }
+    return this.client.requestAuthenticated<PreTriageConversationProjection>(path, {
+      expectedStatus: 200,
+      signal,
+    });
+  }
+
   claimAnonymousPreTriage(sessionId: string, anonymousCapability: string) {
     return this.client.requestAuthenticated<ClaimAnonymousPreTriageResponse>(sessionPath(sessionId, "claim"), {
       method: "POST",
@@ -89,7 +105,7 @@ function capabilityHeaders(capability: string) {
   return { [PRE_TRIAGE_CAPABILITY_HEADER]: capability };
 }
 
-function sessionPath(sessionId: string, action: "answers" | "complete" | "result" | "claim") {
+function sessionPath(sessionId: string, action: "answers" | "complete" | "conversation" | "result" | "claim") {
   return `/api/v1/pre-triage/sessions/${encodeURIComponent(sessionId)}/${action}`;
 }
 

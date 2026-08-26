@@ -49,7 +49,7 @@ export function clearAnonymousPreTriage() {
 function isStoredAnonymousPreTriage(value: Partial<StoredAnonymousPreTriage>): value is StoredAnonymousPreTriage {
   return Boolean(
     typeof value.sessionId === "string" && value.sessionId &&
-    typeof value.pathway === "string" && ["HEADACHE", "ABDOMINAL_PAIN", "FEVER"].includes(value.pathway) &&
+    typeof value.pathway === "string" && ["HEADACHE", "ABDOMINAL_PAIN", "CHEST_PAIN", "FEVER", "OTHER_SYMPTOMS"].includes(value.pathway) &&
     typeof value.questionnaireVersion === "string" && value.questionnaireVersion &&
     typeof value.expiresAt === "string" && Number.isFinite(Date.parse(value.expiresAt)) &&
     typeof value.anonymousCapability === "string" && value.anonymousCapability,

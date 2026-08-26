@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { PreTriageIntakeScreen } from "@/features/pre-triage/pre-triage-flow";
+import { PreTriageChatSessionScreen } from "@/features/pre-triage-chat/pre-triage-chat-screen";
 
-export const metadata: Metadata = { title: "Pre-Triage questions" };
+export const metadata: Metadata = { title: "Chat Pre-Triage" };
 
 export default function PreTriageSessionPage() {
-  return <PreTriageIntakeScreen />;
+  return <PreTriageChatSessionScreen />;
 }

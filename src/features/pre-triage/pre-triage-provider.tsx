@@ -7,8 +7,10 @@ import { usePatients } from "@/features/my-circle/patient-provider";
 import type {
   AccessiblePatient,
   ClaimAnonymousPreTriageResponse,
+  ConversationNextInteraction,
   NeutralPreTriageResult,
   PreTriageAnswerResponse,
+  PreTriageConversationProjection,
   PreTriagePathway,
   QuestionnaireProgress,
   StructuredPreTriageAnswers,
@@ -24,7 +26,7 @@ import {
 } from "./pre-triage-storage";
 
 export type PreTriageMode = "anonymous" | "authenticated";
-export type PreTriageOperation = "starting" | "answering" | "completing" | "loading-result" | "claiming" | null;
+export type PreTriageOperation = "starting" | "answering" | "completing" | "loading-conversation" | "loading-result" | "claiming" | null;
 
 export interface ActivePreTriage {
   sessionId: string;
@@ -34,6 +36,7 @@ export interface ActivePreTriage {
   questionnaireVersion: string;
   expiresAt: string;
   progression?: QuestionnaireProgress;
+  conversation?: PreTriageConversationProjection;
   acceptedAnswers: StructuredPreTriageAnswers;
   result?: NeutralPreTriageResult;
   pendingClaim: boolean;
@@ -55,6 +58,7 @@ type PreTriageContextValue = {
   clearError(): void;
   complete(): Promise<NeutralPreTriageResult>;
   loadResult(sessionId: string): Promise<NeutralPreTriageResult>;
+  loadConversation(sessionId: string, signal?: AbortSignal): Promise<PreTriageConversationProjection>;
   markPendingClaim(): string;
   start(pathway: PreTriagePathway, mode: PreTriageMode, patient?: AccessiblePatient | null): Promise<ActivePreTriage>;
   submit(request: SubmitPreTriageAnswersRequest): Promise<PreTriageAnswerResponse>;
@@ -148,7 +152,9 @@ export function PreTriageProvider({ children }: { children: React.ReactNode }) {
         patientId: mode === "authenticated" ? response.patientId : undefined,
         questionnaireVersion: response.questionnaire.version,
         expiresAt: response.expiresAt,
-        acceptedAnswers: {},
+        progression: progressionFromConversation(response.conversation),
+        conversation: response.conversation,
+        acceptedAnswers: response.conversation.acceptedValues,
         pendingClaim: false,
         anonymousCapability: mode === "anonymous" ? response.anonymousCapability : undefined,
       };
@@ -174,14 +180,13 @@ export function PreTriageProvider({ children }: { children: React.ReactNode }) {
         ...request,
         questionnaireVersion: current.questionnaireVersion,
       }, accessFor(current));
-      const submittedValues = "structured" in request ? request.structured : undefined;
-      const acceptedAnswers = mergeAcceptedAnswers(
-        current.acceptedAnswers,
-        response.acceptedValues,
-        response.acceptedAnswers,
-        submittedValues,
-      );
-      persist({ ...current, acceptedAnswers, progression: response.progression, lastAnswerResponse: response });
+      persist({
+        ...current,
+        acceptedAnswers: response.conversation.acceptedValues,
+        progression: progressionFromConversation(response.conversation),
+        conversation: response.conversation,
+        lastAnswerResponse: response,
+      });
       return response;
     } catch (caught) {
       await handleFailure(caught, current);
@@ -191,9 +196,52 @@ export function PreTriageProvider({ children }: { children: React.ReactNode }) {
     }
   }, [begin, finish, handleFailure, persist, requireCurrent]);
 
+  const loadConversation = useCallback(async (sessionId: string, signal?: AbortSignal) => {
+    const current = active?.sessionId === sessionId ? requireCurrent() : null;
+    let access: PreTriageAccess;
+    if (current?.mode === "anonymous") {
+      access = accessFor(current);
+    } else if (authStatus === "authenticated") {
+      access = { mode: "authenticated" };
+    } else {
+      const unavailable = new BeeexyApiError(404);
+      setError(unavailable);
+      throw unavailable;
+    }
+    begin("loading-conversation");
+    try {
+      const conversation = await beeexyPhase4Api.getPreTriageConversation(sessionId, access, signal);
+      const next: ActivePreTriageInternal = {
+        sessionId: conversation.sessionId,
+        mode: current?.mode || "authenticated",
+        pathway: conversation.pathway.code,
+        patientId: current?.patientId,
+        questionnaireVersion: conversation.questionnaire.version,
+        expiresAt: conversation.expiresAt,
+        progression: progressionFromConversation(conversation),
+        conversation,
+        acceptedAnswers: conversation.acceptedValues,
+        result: current?.result,
+        pendingClaim: current?.pendingClaim || false,
+        anonymousCapability: current?.anonymousCapability,
+      };
+      persist(next);
+      return conversation;
+    } catch (caught) {
+      if (!(caught instanceof Error && caught.name === "AbortError")) await handleFailure(caught, current);
+      throw caught;
+    } finally {
+      finish();
+    }
+  }, [active?.sessionId, authStatus, begin, finish, handleFailure, persist, requireCurrent]);
+
   const complete = useCallback(async () => {
     const current = requireCurrent();
-    if (current.progression?.state !== "READY_TO_COMPLETE" || !current.progression.readyToComplete) {
+    if (
+      (current.conversation && current.conversation.state !== "READY_FOR_REVIEW") ||
+      current.progression?.state !== "READY_TO_COMPLETE" ||
+      !current.progression.readyToComplete
+    ) {
       throw new BeeexyApiError(422, { problem: { status: 422, errorCode: "pre_triage.completion_incomplete" } });
     }
     begin("completing");
@@ -313,10 +361,11 @@ export function PreTriageProvider({ children }: { children: React.ReactNode }) {
     clearError: () => setError(null),
     complete,
     loadResult,
+    loadConversation,
     markPendingClaim,
     start,
     submit,
-  }), [active, error, hydrated, operation, claimConfirmation, claimRecovered, pendingClaimRoute, abandon, claim, complete, loadResult, markPendingClaim, start, submit]);
+  }), [active, error, hydrated, operation, claimConfirmation, claimRecovered, pendingClaimRoute, abandon, claim, complete, loadConversation, loadResult, markPendingClaim, start, submit]);
 
   return <PreTriageContext.Provider value={value}>{children}</PreTriageContext.Provider>;
 }
@@ -350,6 +399,7 @@ function publicState(active: ActivePreTriageInternal): ActivePreTriage {
     questionnaireVersion: active.questionnaireVersion,
     expiresAt: active.expiresAt,
     progression: active.progression,
+    conversation: active.conversation,
     acceptedAnswers: active.acceptedAnswers,
     result: active.result,
     pendingClaim: active.pendingClaim,
@@ -425,4 +475,67 @@ export function validateAnswerRequest(request: SubmitPreTriageAnswersRequest, pa
   if (structured.duration && (!Number.isFinite(structured.duration.value) || structured.duration.value <= 0)) throw new BeeexyApiError(422);
   if (structured.intensity !== undefined && (!Number.isInteger(structured.intensity) || structured.intensity < 1 || structured.intensity > 10)) throw new BeeexyApiError(422);
   if (pathway === "FEVER" && structured.additionalSymptoms?.includes("FEVER")) throw new BeeexyApiError(422);
+}
+
+export function progressionFromConversation(conversation: PreTriageConversationProjection): QuestionnaireProgress {
+  const answeredRequiredFields = acceptedAnswerCodes(conversation.acceptedValues);
+  if (conversation.state !== "IN_PROGRESS") {
+    return {
+      state: "READY_TO_COMPLETE",
+      answeredRequiredFields,
+      missingRequiredFields: [],
+      readyToComplete: true,
+    };
+  }
+
+  const interaction = conversation.nextInteraction;
+  return {
+    state: "IN_PROGRESS",
+    answeredRequiredFields,
+    missingRequiredFields: interaction ? [interaction.questionCode] : [],
+    nextQuestion: interaction ? legacyQuestionFromInteraction(interaction) : undefined,
+    readyToComplete: false,
+  };
+}
+
+function acceptedAnswerCodes(values: StructuredPreTriageAnswers): QuestionnaireProgress["answeredRequiredFields"] {
+  return [
+    ...(values.duration ? ["DURATION" as const] : []),
+    ...(values.intensity !== undefined ? ["INTENSITY" as const] : []),
+    ...(values.additionalSymptoms !== undefined ? ["ADDITIONAL_SYMPTOMS" as const] : []),
+  ];
+}
+
+function legacyQuestionFromInteraction(interaction: ConversationNextInteraction): NonNullable<QuestionnaireProgress["nextQuestion"]> {
+  if (interaction.inputType === "DURATION") {
+    return {
+      code: interaction.questionCode,
+      prompt: interaction.prompt,
+      answerType: "DURATION",
+      allowedValues: [],
+      allowedUnits: interaction.constraints.allowedUnits,
+      minimum: interaction.constraints.minimum,
+      maximum: null,
+    };
+  }
+  if (interaction.inputType === "SCALE") {
+    return {
+      code: interaction.questionCode,
+      prompt: interaction.prompt,
+      answerType: "INTEGER_SCALE",
+      allowedValues: [],
+      allowedUnits: [],
+      minimum: interaction.constraints.minimum,
+      maximum: interaction.constraints.maximum,
+    };
+  }
+  return {
+    code: interaction.questionCode,
+    prompt: interaction.prompt,
+    answerType: "MULTIPLE_CHOICE",
+    allowedValues: interaction.options.map((option) => option.value),
+    allowedUnits: [],
+    minimum: interaction.constraints.minimumSelections,
+    maximum: interaction.constraints.maximumSelections,
+  };
 }

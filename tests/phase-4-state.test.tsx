@@ -53,11 +53,13 @@ const result: NeutralPreTriageResult = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Phase 4 supported intake", () => {
-  it("offers exactly the three supported pathways with exact backend codes", () => {
+  it("keeps the legacy selector aligned with all five supported pathway codes", () => {
     expect(SUPPORTED_PATHWAYS.map(({ code, label }) => ({ code, label }))).toEqual([
       { code: "HEADACHE", label: "Headache" },
       { code: "ABDOMINAL_PAIN", label: "Stomach pain" },
+      { code: "CHEST_PAIN", label: "Chest pain" },
       { code: "FEVER", label: "Fever" },
+      { code: "OTHER_SYMPTOMS", label: "Other" },
     ]);
   });
 
