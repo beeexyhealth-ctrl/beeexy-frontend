@@ -222,12 +222,14 @@ describe("Beeexy Phase 4 API contract", () => {
 
   it("completes without a body and preserves whether the backend returned 201", async () => {
     const fetcher = vi.fn<TestFetch>(async () => json(result, 201));
+    const controller = new AbortController();
 
-    const response = await createApi(fetcher, new MemoryStore(null)).completePreTriage(sessionId, { mode: "anonymous", capability });
+    const response = await createApi(fetcher, new MemoryStore(null)).completePreTriage(sessionId, { mode: "anonymous", capability }, controller.signal);
 
     expect(response).toEqual({ status: 201, data: result });
     expect(fetcher.mock.calls[0][0]).toBe(`${baseUrl}/api/v1/pre-triage/sessions/${sessionId}/complete`);
     expect(fetcher.mock.calls[0][1]?.body).toBeUndefined();
+    expect(fetcher.mock.calls[0][1]?.signal).toBe(controller.signal);
   });
 
   it("retrieves the canonical result with GET and the anonymous capability", async () => {

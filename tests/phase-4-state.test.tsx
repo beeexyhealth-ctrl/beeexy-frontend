@@ -104,7 +104,7 @@ describe("Phase 4 supported intake", () => {
     const markup = renderToStaticMarkup(<PreTriageReviewSummary pathway="HEADACHE" answers={answers} />);
 
     expect(markup).toContain("1 month");
-    expect(markup).toContain("3 / 10");
+    expect(markup).toContain(">3<");
     expect(markup).toContain("Nausea");
     expect(markup).not.toContain("Captured from your description");
   });
@@ -129,8 +129,8 @@ describe("Phase 4 supported intake", () => {
     const markup = renderToStaticMarkup(<PreTriageReviewSummary pathway="HEADACHE" answers={answers} />);
 
     expect(answers).toEqual({});
-    expect(markup.match(/Captured from your description/g)).toHaveLength(3);
-    expect(markup).not.toContain("0 / 10");
+    expect(markup.match(/Not provided/g)).toHaveLength(3);
+    expect(markup).not.toContain("Captured from your description");
   });
 
   it.each([
@@ -211,7 +211,7 @@ describe("neutral result and privacy-safe errors", () => {
     const markup = renderToStaticMarkup(<ResultSummary result={result} />).toLowerCase();
     expect(markup).toContain("stomach pain");
     expect(markup).toContain("2 days");
-    expect(markup).toContain("6/10");
+    expect(markup).toContain(">6<");
     for (const forbidden of ["urgency", "risk level", "diagnosis", "probability", "treatment", "prescription", "recommendation", "red flag"]) expect(markup).not.toContain(forbidden);
   });
 

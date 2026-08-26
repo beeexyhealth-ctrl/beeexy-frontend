@@ -8,11 +8,14 @@ import { Icon, type IconName } from "@/components/ui/icon";
 import { useAuth } from "@/features/auth/auth-provider";
 import { usePatients } from "@/features/my-circle/patient-provider";
 import { displayPatientName } from "@/features/my-circle/patient-state";
+import { AssistantMessage, ConversationHeader } from "@/features/pre-triage-chat/chat-shell";
+import { useChatCompletion, type ChatCompletionState } from "@/features/pre-triage-chat/use-chat-completion";
 import type {
   AdditionalSymptom,
   DurationUnit,
   NextQuestion,
   NeutralPreTriageResult,
+  PreTriageConversationProjection,
   PreTriagePathway,
   QuestionnaireProgress,
   StructuredPreTriageAnswers,
@@ -178,43 +181,160 @@ function PreTriageProgress({ progression }: { progression?: QuestionnaireProgres
 export function PreTriageReviewScreen() {
   const router = useRouter();
   const sessionId = useSessionId();
-  const { active, complete, error, hydrated, operation } = usePreTriage();
+  const { status: authStatus } = useAuth();
+  const { active, complete, error, hydrated, loadConversation } = usePreTriage();
+  const requestedSessionRef = useRef<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const current = active?.sessionId === sessionId ? active : null;
+  const projection = current?.conversation;
+  const completion = useChatCompletion({
+    completeSession: complete,
+    projection,
+    recoverConversation: loadConversation,
+  });
 
   useEffect(() => {
-    if (!hydrated) return;
-    if (!active || active.sessionId !== sessionId) router.replace("/pre-triage/new");
-    else if (active.progression?.state !== "READY_TO_COMPLETE" || !active.progression.readyToComplete) router.replace(`/pre-triage/${encodeURIComponent(sessionId)}`);
-  }, [active, hydrated, router, sessionId]);
+    if (!hydrated || authStatus === "bootstrapping" || projection || current?.result || requestedSessionRef.current === sessionId) return;
+    requestedSessionRef.current = sessionId;
+    void loadConversation(sessionId)
+      .catch((caught) => {
+        if (caught instanceof Error && caught.name === "AbortError") return;
+        setLoadFailed(true);
+      });
+  }, [authStatus, current?.result, hydrated, loadConversation, projection, sessionId]);
 
-  async function finish() {
-    try {
-      await complete();
-      router.push(`/pre-triage/${encodeURIComponent(sessionId)}/result`);
-    } catch {
-      // The provider exposes the error below.
+  useEffect(() => {
+    if (current?.result || completion.state.kind === "completed" || projection?.state === "COMPLETED") {
+      router.replace(`/pre-triage/${encodeURIComponent(sessionId)}/result`);
+      return;
     }
+    if (projection && (projection.state !== "READY_FOR_REVIEW" || projection.nextInteraction)) {
+      router.replace(`/pre-triage/${encodeURIComponent(sessionId)}`);
+    }
+  }, [completion.state.kind, current?.result, projection, router, sessionId]);
+
+  if (!hydrated || authStatus === "bootstrapping" || (!projection && !loadFailed)) {
+    return <PreTriageLoading label="Preparing your review" />;
+  }
+  if (!projection || loadFailed) {
+    return (
+      <PreTriageFrame title="Review" subtitle="Pre-Triage unavailable" backHref="/pre-triage/new">
+        <section className="pretriage-panel claim-error">
+          <span className="pretriage-feature-icon"><Icon name="info" size={22} /></span>
+          <h1>We couldn&apos;t load this review</h1>
+          <p role="alert">{preTriageErrorMessage(error)}</p>
+          <button
+            className="button primary wide"
+            type="button"
+            onClick={() => {
+              requestedSessionRef.current = null;
+              setLoadFailed(false);
+            }}
+          >
+            Try again
+          </button>
+        </section>
+      </PreTriageFrame>
+    );
+  }
+  if (projection.state !== "READY_FOR_REVIEW" || projection.nextInteraction) {
+    return <PreTriageLoading label={projection.state === "COMPLETED" ? "Opening your summary" : "Returning to your conversation"} />;
   }
 
-  if (!hydrated || !active || active.sessionId !== sessionId) return <PreTriageLoading label="Preparing your review" />;
+  const completionLocked = completion.state.kind === "submitting"
+    || completion.state.kind === "recovering"
+    || completion.state.kind === "retryable"
+    || completion.state.kind === "recovery-failed"
+    || completion.state.kind === "blocked"
+    || completion.state.kind === "completed";
+
   return (
-    <PreTriageFrame title="Review" subtitle="Before completion" backHref={`/pre-triage/${encodeURIComponent(sessionId)}`}>
-      <section className="pretriage-intro compact"><span className="pretriage-feature-icon"><Icon name="document" size={21} /></span><h1>Review your symptom details</h1><p>This is an informational summary of what the backend accepted.</p></section>
-      <PreTriageReviewSummary pathway={active.pathway} answers={active.acceptedAnswers} />
-      {Boolean(error) && <p className="pretriage-error" role="alert">{preTriageErrorMessage(error)}</p>}
-      <button className="button primary wide pretriage-primary-action" type="button" disabled={operation !== null} onClick={() => void finish()}>{operation === "completing" ? "Completing..." : "Complete Pre-Triage"}</button>
-    </PreTriageFrame>
+    <FlowFrame className="phase4-pretriage-frame">
+      <main className="chat-pretriage-shell chat-review-shell">
+        <ConversationHeader backHref={`/pre-triage/${encodeURIComponent(sessionId)}`} projection={projection} />
+        <div className="chat-review-body">
+          <AssistantMessage text="Thanks. Your information is ready to review." />
+          <section className="chat-review-card" aria-labelledby="review-heading">
+            <div className="chat-review-heading">
+              <span aria-hidden="true"><Icon name="document" size={20} /></span>
+              <div>
+                <p>Ready for review</p>
+                <h2 id="review-heading">Review your information</h2>
+              </div>
+            </div>
+            <p className="chat-review-description">Confirm the information Beeexy accepted before completing this neutral summary.</p>
+            <PreTriageReviewSummary projection={projection} />
+            <CompletionFeedback
+              onRecoveryRetry={completion.retryRecovery}
+              onRetry={completion.retryCompletion}
+              state={completion.state}
+            />
+            <button
+              className="button primary wide chat-review-complete"
+              type="button"
+              disabled={completionLocked}
+              onClick={() => void completion.complete()}
+            >
+              {completion.state.kind === "submitting" ? "Completing..." : "Complete Pre-Triage"}
+            </button>
+            <p className="pretriage-neutral-note"><Icon name="shield" size={14} />Completion creates a neutral symptom summary. It does not provide a diagnosis.</p>
+          </section>
+        </div>
+      </main>
+    </FlowFrame>
   );
 }
 
-export function PreTriageReviewSummary({ answers, pathway }: { answers: StructuredPreTriageAnswers; pathway: PreTriagePathway }) {
+export function PreTriageReviewSummary({
+  answers: suppliedAnswers,
+  pathway,
+  projection,
+}: {
+  answers?: StructuredPreTriageAnswers;
+  pathway?: PreTriagePathway;
+  projection?: PreTriageConversationProjection;
+}) {
+  const answers = projection?.acceptedValues || suppliedAnswers || {};
+  const primarySymptom = projection?.pathway.label || (pathway ? pathwayLabel(pathway) : "Not provided");
   return (
     <dl className="pretriage-summary">
-      <SummaryItem label="Primary symptom" value={pathwayLabel(pathway)} />
-      <SummaryItem label="Duration" value={answers.duration ? `${answers.duration.value} ${unitLabel(answers.duration.unit, answers.duration.value)}` : "Captured from your description"} />
-      <SummaryItem label="Intensity" value={answers.intensity !== undefined ? `${answers.intensity} / 10` : "Captured from your description"} />
-      <SummaryItem label="Additional symptoms" value={answers.additionalSymptoms ? (answers.additionalSymptoms.length ? answers.additionalSymptoms.map((item) => ADDITIONAL_LABELS[item]).join(", ") : "None") : "Captured from your description"} />
+      <SummaryItem label="Primary symptom" value={primarySymptom} />
+      <SummaryItem label="Duration" value={answers.duration ? `${answers.duration.value} ${unitLabel(answers.duration.unit, answers.duration.value)}` : "Not provided"} />
+      <SummaryItem label="Intensity" value={answers.intensity !== undefined ? `${answers.intensity}` : "Not provided"} />
+      <SummaryItem label="Additional symptoms" value={answers.additionalSymptoms ? (answers.additionalSymptoms.length ? answers.additionalSymptoms.map((item) => ADDITIONAL_LABELS[item]).join(", ") : "None") : "Not provided"} />
     </dl>
   );
+}
+
+function CompletionFeedback({
+  onRecoveryRetry,
+  onRetry,
+  state,
+}: {
+  onRecoveryRetry: () => Promise<void>;
+  onRetry: () => Promise<void>;
+  state: ChatCompletionState;
+}) {
+  if (state.kind === "idle" || state.kind === "completed") return null;
+  if (state.kind === "submitting") return <p className="chat-review-status" role="status">Completing your Pre-Triage</p>;
+  if (state.kind === "recovering") return <p className="chat-review-status" role="status">Checking completion status</p>;
+  if (state.kind === "retryable") {
+    return (
+      <div className="chat-review-feedback" role="status">
+        <p>{state.message}</p>
+        <button className="button secondary wide" type="button" onClick={() => void onRetry()}>Retry completion</button>
+      </div>
+    );
+  }
+  if (state.kind === "recovery-failed") {
+    return (
+      <div className="chat-review-feedback" role="alert">
+        <p>{state.message}</p>
+        <button className="button secondary wide" type="button" onClick={() => void onRecoveryRetry()}>Check completion status</button>
+      </div>
+    );
+  }
+  return <p className="chat-review-error" role="alert">{state.message}</p>;
 }
 
 export function PreTriageResultScreen() {
@@ -302,7 +422,7 @@ function AdditionalSymptomsQuestion({ disabled, pathway, question, submit }: Que
 }
 
 export function ResultSummary({ result }: { result: NeutralPreTriageResult }) {
-  return <section className="pretriage-result" aria-labelledby="result-title"><span className="pretriage-success-icon"><Icon name="check" size={23} /></span><p>Pre-Triage complete</p><h1 id="result-title">{result.primarySymptom.display}</h1><p className="result-completed">Completed {formatDate(result.completedAt)}</p><dl className="pretriage-summary"><SummaryItem label="Duration" value={`${result.duration.value} ${unitLabel(result.duration.unit, result.duration.value)}`} /><SummaryItem label="Intensity" value={`${result.intensity}/10`} /><SummaryItem label="Additional symptoms" value={result.additionalSymptoms.length ? result.additionalSymptoms.map((item) => ADDITIONAL_LABELS[item]).join(", ") : "None"} /></dl></section>;
+  return <section className="pretriage-result" aria-labelledby="result-title"><span className="pretriage-success-icon"><Icon name="check" size={23} /></span><p>Pre-Triage complete</p><h1 id="result-title">{result.primarySymptom.display}</h1><p className="result-completed">Completed {formatDate(result.completedAt)}</p><dl className="pretriage-summary"><SummaryItem label="Duration" value={`${result.duration.value} ${unitLabel(result.duration.unit, result.duration.value)}`} /><SummaryItem label="Intensity" value={`${result.intensity}`} /><SummaryItem label="Additional symptoms" value={result.additionalSymptoms.length ? result.additionalSymptoms.map((item) => ADDITIONAL_LABELS[item]).join(", ") : "None"} /></dl></section>;
 }
 
 function SummaryItem({ label, value }: { label: string; value: string }) { return <div><dt>{label}</dt><dd>{value}</dd></div>; }

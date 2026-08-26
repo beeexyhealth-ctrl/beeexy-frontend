@@ -85,18 +85,20 @@ export class BeeexyPhase4Api {
     });
   }
 
-  completePreTriage(sessionId: string, access: PreTriageAccess): Promise<BeeexyApiResponse<CompletePreTriageResponse>> {
+  completePreTriage(sessionId: string, access: PreTriageAccess, signal?: AbortSignal): Promise<BeeexyApiResponse<CompletePreTriageResponse>> {
     const path = sessionPath(sessionId, "complete");
     if (access.mode === "anonymous") {
       return this.client.requestPublicResponse<CompletePreTriageResponse>(path, {
         method: "POST",
         headers: capabilityHeaders(access.capability),
         expectedStatus: [200, 201],
+        signal,
       });
     }
     return this.client.requestAuthenticatedResponse<CompletePreTriageResponse>(path, {
       method: "POST",
       expectedStatus: [200, 201],
+      signal,
     });
   }
 

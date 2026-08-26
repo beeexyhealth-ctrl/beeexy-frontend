@@ -59,7 +59,7 @@ type PreTriageContextValue = {
   abandon(): void;
   claim(): Promise<ClaimAnonymousPreTriageResponse | null>;
   clearError(): void;
-  complete(): Promise<NeutralPreTriageResult>;
+  complete(signal?: AbortSignal): Promise<NeutralPreTriageResult>;
   loadResult(sessionId: string): Promise<NeutralPreTriageResult>;
   loadConversation(sessionId: string, signal?: AbortSignal): Promise<PreTriageConversationProjection>;
   markPendingClaim(): string;
@@ -289,6 +289,9 @@ export function PreTriageProvider({ children }: { children: React.ReactNode }) {
         transientUserTurn: current?.transientUserTurn,
       };
       persist(next);
+      if (conversation.state === "COMPLETED" && current?.conversation?.state !== "COMPLETED" && next.mode === "authenticated") {
+        notifyClinicalHistoryChanged(current?.patientId || activePatient?.profileId || primaryPatient?.profileId);
+      }
       return conversation;
     } catch (caught) {
       if (!(caught instanceof Error && caught.name === "AbortError")) await handleFailure(caught, current);
@@ -296,9 +299,9 @@ export function PreTriageProvider({ children }: { children: React.ReactNode }) {
     } finally {
       finish();
     }
-  }, [active?.sessionId, authStatus, begin, finish, handleFailure, persist, requireCurrent]);
+  }, [active?.sessionId, activePatient?.profileId, authStatus, begin, finish, handleFailure, persist, primaryPatient?.profileId, requireCurrent]);
 
-  const complete = useCallback(async () => {
+  const complete = useCallback(async (signal?: AbortSignal) => {
     const current = requireCurrent();
     if (
       (current.conversation && current.conversation.state !== "READY_FOR_REVIEW") ||
@@ -309,14 +312,14 @@ export function PreTriageProvider({ children }: { children: React.ReactNode }) {
     }
     begin("completing");
     try {
-      const response = await beeexyPhase4Api.completePreTriage(current.sessionId, accessFor(current));
+      const response = await beeexyPhase4Api.completePreTriage(current.sessionId, accessFor(current), signal);
       persist({ ...current, result: response.data });
       if (current.mode === "authenticated") {
         notifyClinicalHistoryChanged(current.patientId || activePatient?.profileId || primaryPatient?.profileId);
       }
       return response.data;
     } catch (caught) {
-      await handleFailure(caught, current);
+      if (!(caught instanceof Error && caught.name === "AbortError")) await handleFailure(caught, current);
       throw caught;
     } finally {
       finish();
