@@ -66,7 +66,7 @@ export class BeeexyPhase4Api {
     return this.client.requestAuthenticated<StartPreTriageFromIntakeResponse>("/api/v1/pre-triage/intake", options);
   }
 
-  submitPreTriageAnswers(sessionId: string, request: SubmitPreTriageAnswersRequest, access: PreTriageAccess) {
+  submitPreTriageAnswers(sessionId: string, request: SubmitPreTriageAnswersRequest, access: PreTriageAccess, signal?: AbortSignal) {
     const path = sessionPath(sessionId, "answers");
     if (access.mode === "anonymous") {
       return this.client.requestPublic<PreTriageAnswerResponse>(path, {
@@ -74,12 +74,14 @@ export class BeeexyPhase4Api {
         body: request,
         headers: capabilityHeaders(access.capability),
         expectedStatus: 200,
+        signal,
       });
     }
     return this.client.requestAuthenticated<PreTriageAnswerResponse>(path, {
       method: "POST",
       body: request,
       expectedStatus: 200,
+      signal,
     });
   }
 

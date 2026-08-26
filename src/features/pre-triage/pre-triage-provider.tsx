@@ -65,7 +65,7 @@ type PreTriageContextValue = {
   markPendingClaim(): string;
   startFromIntake(text: string, idempotencyKey: string, mode: PreTriageMode, signal?: AbortSignal): Promise<StartPreTriageFromIntakeResponse>;
   start(pathway: PreTriagePathway, mode: PreTriageMode, patient?: AccessiblePatient | null): Promise<ActivePreTriage>;
-  submit(request: SubmitPreTriageAnswersRequest): Promise<PreTriageAnswerResponse>;
+  submit(request: SubmitPreTriageAnswersRequest, signal?: AbortSignal): Promise<PreTriageAnswerResponse>;
 };
 
 const PreTriageContext = createContext<PreTriageContextValue | null>(null);
@@ -233,7 +233,7 @@ export function PreTriageProvider({ children }: { children: React.ReactNode }) {
     }
   }, [active, authStatus, begin, finish, handleFailure, persist]);
 
-  const submit = useCallback(async (request: SubmitPreTriageAnswersRequest) => {
+  const submit = useCallback(async (request: SubmitPreTriageAnswersRequest, signal?: AbortSignal) => {
     const current = requireCurrent();
     begin("answering");
     try {
@@ -241,7 +241,7 @@ export function PreTriageProvider({ children }: { children: React.ReactNode }) {
       const response = await beeexyPhase4Api.submitPreTriageAnswers(current.sessionId, {
         ...request,
         questionnaireVersion: current.questionnaireVersion,
-      }, accessFor(current));
+      }, accessFor(current), signal);
       persist({
         ...current,
         acceptedAnswers: response.conversation.acceptedValues,
@@ -251,7 +251,7 @@ export function PreTriageProvider({ children }: { children: React.ReactNode }) {
       });
       return response;
     } catch (caught) {
-      await handleFailure(caught, current);
+      if (!(caught instanceof Error && caught.name === "AbortError")) await handleFailure(caught, current);
       throw caught;
     } finally {
       finish();

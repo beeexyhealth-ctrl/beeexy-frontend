@@ -12,11 +12,16 @@ import {
 } from "react";
 import { Icon } from "@/components/ui/icon";
 import type {
+  ConversationNextInteraction,
   DurationAnswer,
   PreTriageConversationProjection,
   PreTriagePathway,
+  RequiredAnswerCode,
+  StructuredPreTriageAnswers,
 } from "@/lib/beeexy-api/contracts";
+import { ConversationInteraction } from "./conversation-interaction";
 import type { ChatIntakeState } from "./use-chat-intake";
+import { conversationInteractionKey, type ChatProgressionState } from "./use-chat-progression";
 
 export const CHAT_PATHWAYS: ReadonlyArray<{ code: PreTriagePathway; label: string }> = [
   { code: "HEADACHE", label: "Headache" },
@@ -34,7 +39,6 @@ export interface ChatShellError {
 
 type ChatPreTriageShellProps = {
   backHref: string;
-  composerLoading?: boolean;
   contextControl?: ReactNode;
   entryState?: ChatIntakeState;
   error?: ChatShellError | null;
@@ -46,7 +50,11 @@ type ChatPreTriageShellProps = {
   onEntryReset?: () => void;
   onEntryRetry?: () => Promise<void> | void;
   onPathwaySelect?: (pathway: PreTriagePathway) => Promise<void> | void;
+  onProgressionRecoveryRetry?: () => Promise<void> | void;
+  onProgressionRetry?: () => Promise<void> | void;
   onRetry?: () => void;
+  onStructuredSubmit?: (interaction: ConversationNextInteraction, answer: StructuredPreTriageAnswers) => Promise<void> | void;
+  progressionState?: ChatProgressionState;
   projection?: PreTriageConversationProjection | null;
   reviewHref?: string;
   resultHref?: string;
@@ -56,7 +64,6 @@ type ChatPreTriageShellProps = {
 
 export function ChatPreTriageShell({
   backHref,
-  composerLoading = false,
   contextControl,
   entryState = { kind: "idle" },
   error,
@@ -68,8 +75,12 @@ export function ChatPreTriageShell({
   onEntryReset,
   onEntryRetry,
   onPathwaySelect,
+  onProgressionRecoveryRetry,
+  onProgressionRetry,
   onRetry,
+  onStructuredSubmit,
   projection,
+  progressionState = { kind: "idle" },
   reviewHref,
   resultHref,
   startingPathway = null,
@@ -87,8 +98,9 @@ export function ChatPreTriageShell({
     const feed = feedRef.current;
     const interaction = interactionRef.current;
     if (!feed || !interaction || feed.scrollHeight - feed.scrollTop - feed.clientHeight > 180) return;
-    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    interaction.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "nearest" });
+    const reduceMotion = typeof window.matchMedia === "function"
+      && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    interaction.scrollIntoView?.({ behavior: reduceMotion ? "auto" : "smooth", block: "nearest" });
   }, [interactionCode]);
 
   return (
@@ -101,7 +113,7 @@ export function ChatPreTriageShell({
           <ConversationError error={error} onRetry={onRetry} />
         ) : (
           <ConversationContent
-            composerLoading={composerLoading}
+            key={projection?.sessionId || "entry"}
             contextControl={contextControl}
             entryState={entryState}
             initialComposerDisabled={initialComposerDisabled}
@@ -112,7 +124,11 @@ export function ChatPreTriageShell({
             onEntryReset={onEntryReset}
             onEntryRetry={onEntryRetry}
             onPathwaySelect={onPathwaySelect}
+            onProgressionRecoveryRetry={onProgressionRecoveryRetry}
+            onProgressionRetry={onProgressionRetry}
+            onStructuredSubmit={onStructuredSubmit}
             projection={projection}
+            progressionState={progressionState}
             reviewHref={reviewHref}
             resultHref={resultHref}
             startingPathway={startingPathway}
@@ -162,7 +178,6 @@ export function ConversationHeader({
 }
 
 function ConversationContent({
-  composerLoading,
   contextControl,
   entryState,
   initialComposerDisabled,
@@ -173,13 +188,16 @@ function ConversationContent({
   onEntryReset,
   onEntryRetry,
   onPathwaySelect,
+  onProgressionRecoveryRetry,
+  onProgressionRetry,
+  onStructuredSubmit,
   projection,
+  progressionState,
   reviewHref,
   resultHref,
   startingPathway,
   transientUserTurn,
 }: {
-  composerLoading: boolean;
   contextControl?: ReactNode;
   entryState: ChatIntakeState;
   initialComposerDisabled: boolean;
@@ -190,12 +208,25 @@ function ConversationContent({
   onEntryReset?: () => void;
   onEntryRetry?: () => Promise<void> | void;
   onPathwaySelect?: (pathway: PreTriagePathway) => Promise<void> | void;
+  onProgressionRecoveryRetry?: () => Promise<void> | void;
+  onProgressionRetry?: () => Promise<void> | void;
+  onStructuredSubmit?: (interaction: ConversationNextInteraction, answer: StructuredPreTriageAnswers) => Promise<void> | void;
   projection?: PreTriageConversationProjection | null;
+  progressionState: ChatProgressionState;
   reviewHref?: string;
   resultHref?: string;
   startingPathway: PreTriagePathway | null;
   transientUserTurn?: string;
 }) {
+  const [optionLabels, setOptionLabels] = useState<Record<string, string>>({});
+
+  function submitStructured(interaction: ConversationNextInteraction, answer: StructuredPreTriageAnswers) {
+    if (interaction.inputType === "MULTI_SELECT") {
+      setOptionLabels(Object.fromEntries(interaction.options.map((option) => [option.value, option.label])));
+    }
+    return onStructuredSubmit?.(interaction, answer);
+  }
+
   if (!projection) {
     const entryPending = entryState.kind === "pending" || entryState.kind === "resolved";
     const selectedPathway = startingPathway ? CHAT_PATHWAYS.find((pathway) => pathway.code === startingPathway) : null;
@@ -233,13 +264,34 @@ function ConversationContent({
     <div className="chat-feed-content">
       <AssistantMessage text="I’ll help organize the details you share." />
       <UserMessage text={transientUserTurn || projection.pathway.label} />
-      {!transientUserTurn && <AcceptedValueTurns projection={projection} />}
+      <ConversationAcceptedValueTurns
+        key={projection.sessionId}
+        optionLabels={optionLabels}
+        projection={projection}
+        transientUserTurn={transientUserTurn}
+      />
 
-      <div ref={interactionRef}>
+      <div ref={interactionRef} aria-live="polite">
         {projection.state === "IN_PROGRESS" && projection.nextInteraction && (
           <AssistantMessage text={projection.nextInteraction.prompt}>
             <InteractionPanel label="Current response">
-              <p className="chat-interaction-note">Share a short answer below.</p>
+              <ConversationInteraction
+                key={conversationInteractionKey(projection)}
+                disabled={progressionState.kind === "submitting"
+                  || progressionState.kind === "recovering"
+                  || progressionState.kind === "recovery-failed"}
+                error={progressionState.kind === "validation" || progressionState.kind === "blocked"
+                  ? progressionState.message
+                  : null}
+                interaction={projection.nextInteraction}
+                onSubmit={submitStructured}
+                pending={progressionState.kind === "submitting" || progressionState.kind === "recovering"}
+              />
+              <ProgressionFeedback
+                state={progressionState}
+                onRecoveryRetry={onProgressionRecoveryRetry}
+                onRetry={onProgressionRetry}
+              />
             </InteractionPanel>
           </AssistantMessage>
         )}
@@ -260,30 +312,89 @@ function ConversationContent({
           </AssistantMessage>
         )}
       </div>
-
-      {projection.state === "IN_PROGRESS" && (
-        <ChatComposer disabled={!onComposerSubmit} loading={composerLoading} onSubmit={onComposerSubmit} />
-      )}
     </div>
   );
 }
 
-function AcceptedValueTurns({ projection }: { projection: PreTriageConversationProjection }) {
+function ConversationAcceptedValueTurns({
+  optionLabels,
+  projection,
+  transientUserTurn,
+}: {
+  optionLabels: Readonly<Record<string, string>>;
+  projection: PreTriageConversationProjection;
+  transientUserTurn?: string;
+}) {
+  const [hiddenFields] = useState<ReadonlyArray<RequiredAnswerCode>>(() => {
+    if (!transientUserTurn) return [];
+    const accepted = projection.acceptedValues;
+    return [
+      ...(accepted.duration ? ["DURATION" as const] : []),
+      ...(accepted.intensity !== undefined ? ["INTENSITY" as const] : []),
+      ...(accepted.additionalSymptoms !== undefined ? ["ADDITIONAL_SYMPTOMS" as const] : []),
+    ];
+  });
+  return <AcceptedValueTurns hiddenFields={hiddenFields} optionLabels={optionLabels} projection={projection} />;
+}
+
+function AcceptedValueTurns({
+  hiddenFields,
+  optionLabels,
+  projection,
+}: {
+  hiddenFields: ReadonlyArray<RequiredAnswerCode>;
+  optionLabels: Readonly<Record<string, string>>;
+  projection: PreTriageConversationProjection;
+}) {
   const { acceptedValues } = projection;
   return (
     <>
-      {acceptedValues.duration && <UserMessage label="Duration" text={formatDuration(acceptedValues.duration)} />}
-      {acceptedValues.intensity !== undefined && <UserMessage label="Intensity" text={`${acceptedValues.intensity} out of 10`} />}
-      {acceptedValues.additionalSymptoms !== undefined && (
+      {acceptedValues.duration && !hiddenFields.includes("DURATION") && <UserMessage label="Duration" text={formatDuration(acceptedValues.duration)} />}
+      {acceptedValues.intensity !== undefined && !hiddenFields.includes("INTENSITY") && <UserMessage label="Intensity" text={`${acceptedValues.intensity}`} />}
+      {acceptedValues.additionalSymptoms !== undefined && !hiddenFields.includes("ADDITIONAL_SYMPTOMS") && (
         <UserMessage
           label="Additional symptoms"
           text={acceptedValues.additionalSymptoms.length
-            ? acceptedValues.additionalSymptoms.map(humanizeCode).join(", ")
+            ? acceptedValues.additionalSymptoms.map((value) => optionLabels[value] || humanizeCode(value)).join(", ")
             : "None"}
         />
       )}
     </>
   );
+}
+
+function ProgressionFeedback({
+  onRecoveryRetry,
+  onRetry,
+  state,
+}: {
+  onRecoveryRetry?: () => Promise<void> | void;
+  onRetry?: () => Promise<void> | void;
+  state: ChatProgressionState;
+}) {
+  if (state.kind === "submitting") {
+    return <p className="chat-processing" role="status">Saving your response</p>;
+  }
+  if (state.kind === "recovering") {
+    return <p className="chat-processing" role="status">Checking whether your response was saved</p>;
+  }
+  if (state.kind === "retryable") {
+    return (
+      <div className="chat-progression-feedback" role="status">
+        <p>{state.message}</p>
+        <button className="button secondary wide" type="button" onClick={() => void onRetry?.()}>Retry answer</button>
+      </div>
+    );
+  }
+  if (state.kind === "recovery-failed") {
+    return (
+      <div className="chat-progression-feedback" role="alert">
+        <p>{state.message}</p>
+        <button className="button secondary wide" type="button" onClick={() => void onRecoveryRetry?.()}>Check conversation</button>
+      </div>
+    );
+  }
+  return null;
 }
 
 export function AssistantMessage({ children, text }: { children?: ReactNode; text: string }) {

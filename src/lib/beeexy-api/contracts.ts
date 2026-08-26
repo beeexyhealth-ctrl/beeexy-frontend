@@ -205,8 +205,8 @@ export interface ConversationProgress {
   percentage: number;
 }
 
-export interface ConversationOption {
-  value: string;
+export interface ConversationOption<TValue extends string = string> {
+  value: TValue;
   label: string;
 }
 
@@ -214,7 +214,6 @@ interface ConversationInteractionCommon {
   questionCode: RequiredAnswerCode;
   prompt: string;
   required: boolean;
-  options: ConversationOption[];
 }
 
 export type ConversationNextInteraction =
@@ -226,6 +225,7 @@ export type ConversationNextInteraction =
         exclusiveMinimum: boolean;
         allowedUnits: DurationUnit[];
       };
+      options: [];
     })
   | (ConversationInteractionCommon & {
       field: "intensity";
@@ -235,6 +235,7 @@ export type ConversationNextInteraction =
         maximum: number;
         step: number;
       };
+      options: [];
     })
   | (ConversationInteractionCommon & {
       field: "additionalSymptoms";
@@ -244,6 +245,7 @@ export type ConversationNextInteraction =
         maximumSelections: number;
         allowsEmptySelection: boolean;
       };
+      options: ConversationOption<AdditionalSymptom>[];
     });
 
 export interface PreTriageConversationProjection {

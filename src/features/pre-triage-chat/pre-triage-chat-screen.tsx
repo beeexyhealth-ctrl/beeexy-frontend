@@ -12,6 +12,7 @@ import type { PreTriagePathway } from "@/lib/beeexy-api/contracts";
 import { BeeexyApiError, BeeexyNetworkError } from "@/lib/beeexy-api/problem-details";
 import { ChatPreTriageShell, ConversationHeader, type ChatShellError } from "./chat-shell";
 import { useChatIntake } from "./use-chat-intake";
+import { useChatProgression } from "./use-chat-progression";
 
 export function PreTriageChatStartScreen() {
   const router = useRouter();
@@ -126,7 +127,7 @@ export function PreTriageChatStartScreen() {
 export function PreTriageChatSessionScreen() {
   const sessionId = useParams<{ sessionId: string }>().sessionId;
   const { status: authStatus } = useAuth();
-  const { active, error, hydrated, loadConversation, operation, submit } = usePreTriage();
+  const { active, error, hydrated, loadConversation, submit } = usePreTriage();
   const requestedSessionRef = useRef<string | null>(null);
   const [bootstrapState, setBootstrapState] = useState<"loading" | "ready" | "error">("loading");
 
@@ -147,24 +148,29 @@ export function PreTriageChatSessionScreen() {
     setBootstrapState("loading");
   }
 
-  async function sendMessage(value: string) {
-    await submit({ naturalLanguage: value });
-  }
-
   const projection = active?.sessionId === sessionId ? active.conversation : null;
-  const loading = !hydrated || authStatus === "bootstrapping" || bootstrapState === "loading" || (!projection && bootstrapState !== "error");
-  const shellError = bootstrapState === "error" ? chatShellError(error) : null;
+  const progression = useChatProgression({
+    projection,
+    recoverConversation: loadConversation,
+    submitAnswer: submit,
+  });
+  const loading = !hydrated || authStatus === "bootstrapping" || bootstrapState === "loading";
+  const shellError = bootstrapState === "error" || (!projection && bootstrapState === "ready")
+    ? chatShellError(error)
+    : null;
 
   return (
     <FlowFrame className="phase4-pretriage-frame">
       <ChatPreTriageShell
         backHref={authStatus === "authenticated" ? "/home" : "/login"}
-        composerLoading={operation === "answering"}
         error={shellError}
         loading={loading}
-        onComposerSubmit={projection?.state === "IN_PROGRESS" ? sendMessage : undefined}
+        onProgressionRecoveryRetry={progression.retryRecovery}
+        onProgressionRetry={progression.retryAnswer}
         onRetry={shellError?.retryable ? retry : undefined}
+        onStructuredSubmit={progression.submit}
         projection={projection}
+        progressionState={progression.state}
         reviewHref={`/pre-triage/${encodeURIComponent(sessionId)}/review`}
         resultHref={`/pre-triage/${encodeURIComponent(sessionId)}/result`}
         transientUserTurn={active?.sessionId === sessionId ? active.transientUserTurn : undefined}
