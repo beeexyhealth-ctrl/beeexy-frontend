@@ -26,18 +26,20 @@ export type PreTriageIntakeAccess =
 export class BeeexyPhase4Api {
   constructor(private readonly client: BeeexyApiClient) {}
 
-  startPreTriage(request: StartPreTriageRequest, mode: PreTriageAccess["mode"]) {
+  startPreTriage(request: StartPreTriageRequest, mode: PreTriageAccess["mode"], signal?: AbortSignal) {
     if (mode === "anonymous") {
       return this.client.requestPublic<PreTriageSessionStartResponse>("/api/v1/pre-triage/sessions", {
         method: "POST",
         body: request,
         expectedStatus: 201,
+        signal,
       });
     }
     return this.client.requestAuthenticated<PreTriageSessionStartResponse>("/api/v1/pre-triage/sessions", {
       method: "POST",
       body: request,
       expectedStatus: 201,
+      signal,
     });
   }
 
@@ -102,15 +104,16 @@ export class BeeexyPhase4Api {
     });
   }
 
-  getPreTriageResult(sessionId: string, access: PreTriageAccess) {
+  getPreTriageResult(sessionId: string, access: PreTriageAccess, signal?: AbortSignal) {
     const path = sessionPath(sessionId, "result");
     if (access.mode === "anonymous") {
       return this.client.requestPublic<CompletePreTriageResponse>(path, {
         headers: capabilityHeaders(access.capability),
         expectedStatus: 200,
+        signal,
       });
     }
-    return this.client.requestAuthenticated<CompletePreTriageResponse>(path, { expectedStatus: 200 });
+    return this.client.requestAuthenticated<CompletePreTriageResponse>(path, { expectedStatus: 200, signal });
   }
 
   getPreTriageConversation(sessionId: string, access: PreTriageAccess, signal?: AbortSignal) {

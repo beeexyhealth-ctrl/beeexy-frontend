@@ -132,8 +132,13 @@ describe("Beeexy Phase 4 API contract", () => {
   it("starts an anonymous session with the exact path/body and no credentials", async () => {
     const response: PreTriageSessionStartResponse = { ...commonStart, anonymousCapability: capability };
     const fetcher = vi.fn<TestFetch>(async () => json(response, 201));
+    const controller = new AbortController();
 
-    await expect(createApi(fetcher, new MemoryStore(null)).startPreTriage({ pathway: "HEADACHE" }, "anonymous")).resolves.toEqual(response);
+    await expect(createApi(fetcher, new MemoryStore(null)).startPreTriage(
+      { pathway: "HEADACHE" },
+      "anonymous",
+      controller.signal,
+    )).resolves.toEqual(response);
 
     const [url, init] = fetcher.mock.calls[0];
     const headers = init?.headers as Headers;
@@ -142,6 +147,7 @@ describe("Beeexy Phase 4 API contract", () => {
     expect(JSON.parse(String(init?.body))).toEqual({ pathway: "HEADACHE" });
     expect(headers.get("Authorization")).toBeNull();
     expect(headers.get(PRE_TRIAGE_CAPABILITY_HEADER)).toBeNull();
+    expect(init?.signal).toBe(controller.signal);
   });
 
   it("starts an authenticated managed-patient session with Bearer and patientId", async () => {
@@ -234,12 +240,18 @@ describe("Beeexy Phase 4 API contract", () => {
 
   it("retrieves the canonical result with GET and the anonymous capability", async () => {
     const fetcher = vi.fn<TestFetch>(async () => json(result));
+    const controller = new AbortController();
 
-    await expect(createApi(fetcher, new MemoryStore(null)).getPreTriageResult(sessionId, { mode: "anonymous", capability })).resolves.toEqual(result);
+    await expect(createApi(fetcher, new MemoryStore(null)).getPreTriageResult(
+      sessionId,
+      { mode: "anonymous", capability },
+      controller.signal,
+    )).resolves.toEqual(result);
 
     expect(fetcher.mock.calls[0][1]?.method).toBe("GET");
     expect((fetcher.mock.calls[0][1]?.headers as Headers).get(PRE_TRIAGE_CAPABILITY_HEADER)).toBe(capability);
     expect(fetcher.mock.calls[0][1]?.body).toBeUndefined();
+    expect(fetcher.mock.calls[0][1]?.signal).toBe(controller.signal);
   });
 
   it("loads the exact conversation projection route with anonymous capability", async () => {

@@ -184,9 +184,10 @@ export function PreTriageReviewScreen() {
   const { status: authStatus } = useAuth();
   const { active, complete, error, hydrated, loadConversation } = usePreTriage();
   const requestedSessionRef = useRef<string | null>(null);
-  const [loadFailed, setLoadFailed] = useState(false);
+  const [failedSessionId, setFailedSessionId] = useState<string | null>(null);
   const current = active?.sessionId === sessionId ? active : null;
   const projection = current?.conversation;
+  const loadFailed = failedSessionId === sessionId;
   const completion = useChatCompletion({
     completeSession: complete,
     projection,
@@ -196,11 +197,18 @@ export function PreTriageReviewScreen() {
   useEffect(() => {
     if (!hydrated || authStatus === "bootstrapping" || projection || current?.result || requestedSessionRef.current === sessionId) return;
     requestedSessionRef.current = sessionId;
-    void loadConversation(sessionId)
-      .catch((caught) => {
-        if (caught instanceof Error && caught.name === "AbortError") return;
-        setLoadFailed(true);
-      });
+    const controller = new AbortController();
+    const frame = requestAnimationFrame(() => {
+      void loadConversation(sessionId, controller.signal)
+        .catch((caught) => {
+          if (caught instanceof Error && caught.name === "AbortError") return;
+          if (requestedSessionRef.current === sessionId) setFailedSessionId(sessionId);
+        });
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      controller.abort();
+    };
   }, [authStatus, current?.result, hydrated, loadConversation, projection, sessionId]);
 
   useEffect(() => {
@@ -228,7 +236,7 @@ export function PreTriageReviewScreen() {
             type="button"
             onClick={() => {
               requestedSessionRef.current = null;
-              setLoadFailed(false);
+              setFailedSessionId(null);
             }}
           >
             Try again
@@ -341,13 +349,22 @@ export function PreTriageResultScreen() {
   const router = useRouter();
   const sessionId = useSessionId();
   const { active, error, hydrated, loadResult, markPendingClaim, operation } = usePreTriage();
-  const requestedRef = useRef(false);
+  const requestedSessionRef = useRef<string | null>(null);
   const result = active?.sessionId === sessionId ? active.result : undefined;
 
   useEffect(() => {
-    if (!hydrated || result || requestedRef.current) return;
-    requestedRef.current = true;
-    void loadResult(sessionId).catch(() => undefined);
+    if (!hydrated || result || requestedSessionRef.current === sessionId) return;
+    requestedSessionRef.current = sessionId;
+    const controller = new AbortController();
+    const frame = requestAnimationFrame(() => {
+      void loadResult(sessionId, controller.signal).catch((caught) => {
+        if (caught instanceof Error && caught.name === "AbortError") return;
+      });
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      controller.abort();
+    };
   }, [hydrated, loadResult, result, sessionId]);
 
   function signInToSave() {

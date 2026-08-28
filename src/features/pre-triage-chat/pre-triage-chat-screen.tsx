@@ -22,6 +22,9 @@ export function PreTriageChatStartScreen() {
   const [startingPathway, setStartingPathway] = useState<PreTriagePathway | null>(null);
   const [selectedPatientId, setSelectedPatientId] = useState(activePatient?.profileId || "");
   const pathwayInFlightRef = useRef(false);
+  const pathwayControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => () => pathwayControllerRef.current?.abort(), []);
 
   const mode = authStatus === "authenticated" ? "authenticated" : "anonymous";
   const resolvedPatientId = selectedPatientId || activePatient?.profileId || "";
@@ -40,14 +43,18 @@ export function PreTriageChatStartScreen() {
   async function choosePathway(pathway: PreTriagePathway) {
     if (operation || startingPathway || pathwayInFlightRef.current) return;
     pathwayInFlightRef.current = true;
+    const controller = new AbortController();
+    pathwayControllerRef.current = controller;
     clearError();
     setStartingPathway(pathway);
     try {
-      const session = await start(pathway, mode, selectedPatient);
+      const session = await start(pathway, mode, selectedPatient, controller.signal);
       router.push(`/pre-triage/${encodeURIComponent(session.sessionId)}`);
-    } catch {
+    } catch (caught) {
+      if (caught instanceof Error && caught.name === "AbortError") return;
       setStartingPathway(null);
     } finally {
+      if (pathwayControllerRef.current === controller) pathwayControllerRef.current = null;
       pathwayInFlightRef.current = false;
     }
   }
@@ -128,34 +135,49 @@ export function PreTriageChatSessionScreen() {
   const sessionId = useParams<{ sessionId: string }>().sessionId;
   const { status: authStatus } = useAuth();
   const { active, error, hydrated, loadConversation, submit } = usePreTriage();
-  const requestedSessionRef = useRef<string | null>(null);
-  const [bootstrapState, setBootstrapState] = useState<"loading" | "ready" | "error">("loading");
+  const projection = active?.sessionId === sessionId ? active.conversation : null;
+  const [bootstrap, setBootstrap] = useState<{
+    sessionId: string;
+    state: "loading" | "ready" | "error";
+  }>({ sessionId, state: projection ? "ready" : "loading" });
+  const [retryRevision, setRetryRevision] = useState(0);
 
   useEffect(() => {
-    if (!hydrated || authStatus === "bootstrapping" || bootstrapState !== "loading" || requestedSessionRef.current === sessionId) return;
-    requestedSessionRef.current = sessionId;
-    setBootstrapState("loading");
-    void loadConversation(sessionId)
-      .then(() => setBootstrapState("ready"))
-      .catch((caught) => {
-        if (caught instanceof Error && caught.name === "AbortError") return;
-        setBootstrapState("error");
-      });
-  }, [authStatus, bootstrapState, hydrated, loadConversation, sessionId]);
+    if (!hydrated || authStatus === "bootstrapping") return;
+    if (projection) return;
+    const controller = new AbortController();
+    const frame = requestAnimationFrame(() => {
+      if (controller.signal.aborted) return;
+      void loadConversation(sessionId, controller.signal)
+        .then(() => {
+          if (controller.signal.aborted) return;
+          setBootstrap({ sessionId, state: "ready" });
+        })
+        .catch((caught) => {
+          if (caught instanceof Error && caught.name === "AbortError") return;
+          if (!controller.signal.aborted) setBootstrap({ sessionId, state: "error" });
+        });
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      controller.abort();
+    };
+  }, [authStatus, hydrated, loadConversation, projection, retryRevision, sessionId]);
 
   function retry() {
-    requestedSessionRef.current = null;
-    setBootstrapState("loading");
+    setBootstrap({ sessionId, state: "loading" });
+    setRetryRevision((current) => current + 1);
   }
 
-  const projection = active?.sessionId === sessionId ? active.conversation : null;
   const progression = useChatProgression({
     projection,
     recoverConversation: loadConversation,
     submitAnswer: submit,
   });
-  const loading = !hydrated || authStatus === "bootstrapping" || bootstrapState === "loading";
-  const shellError = bootstrapState === "error" || (!projection && bootstrapState === "ready")
+  const loading = !hydrated || authStatus === "bootstrapping" || (!projection
+    && (bootstrap.sessionId !== sessionId || bootstrap.state === "loading"));
+  const shellError = bootstrap.sessionId === sessionId
+    && (bootstrap.state === "error" || (!projection && bootstrap.state === "ready"))
     ? chatShellError(error)
     : null;
 

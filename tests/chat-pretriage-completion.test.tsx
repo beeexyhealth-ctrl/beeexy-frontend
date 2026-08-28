@@ -154,7 +154,7 @@ describe("Part 8 authoritative review", () => {
     const loadConversation = vi.fn().mockResolvedValue(readyProjection);
     configureProvider({ active: null, complete, loadConversation });
     render(<PreTriageReviewScreen />);
-    await waitFor(() => expect(loadConversation).toHaveBeenCalledWith("session-1"));
+    await waitFor(() => expect(loadConversation).toHaveBeenCalledWith("session-1", expect.any(AbortSignal)));
     expect(complete).not.toHaveBeenCalled();
   });
 });

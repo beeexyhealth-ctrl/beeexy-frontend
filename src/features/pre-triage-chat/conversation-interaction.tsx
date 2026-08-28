@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useId, useMemo, useState } from "react";
+import { type FormEvent, useId, useMemo, useRef, useState } from "react";
 import { Icon } from "@/components/ui/icon";
 import type {
   AdditionalSymptom,
@@ -170,6 +170,7 @@ function MultiSelectInteraction({ disabled, error, interaction, onSubmit, pendin
   const [selected, setSelected] = useState<AdditionalSymptom[]>([]);
   const [noneSelected, setNoneSelected] = useState(false);
   const [selectionError, setSelectionError] = useState<string | null>(null);
+  const submittingRef = useRef(false);
   const { allowsEmptySelection, maximumSelections, minimumSelections } = interaction.constraints;
   const selectedSet = useMemo(() => new Set(selected), [selected]);
   const valid = selected.length >= minimumSelections
@@ -177,7 +178,7 @@ function MultiSelectInteraction({ disabled, error, interaction, onSubmit, pendin
     && (selected.length > 0 || (allowsEmptySelection && noneSelected));
 
   function toggle(value: AdditionalSymptom) {
-    if (disabled) return;
+    if (disabled || submittingRef.current) return;
     setNoneSelected(false);
     setSelected((current) => {
       if (current.includes(value)) {
@@ -194,7 +195,7 @@ function MultiSelectInteraction({ disabled, error, interaction, onSubmit, pendin
   }
 
   function chooseNone() {
-    if (disabled || !allowsEmptySelection) return;
+    if (disabled || submittingRef.current || !allowsEmptySelection) return;
     setSelected([]);
     setNoneSelected(true);
     setSelectionError(null);
@@ -202,8 +203,10 @@ function MultiSelectInteraction({ disabled, error, interaction, onSubmit, pendin
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!valid || disabled) return;
-    void onSubmit(interaction, { additionalSymptoms: selected });
+    if (!valid || disabled || submittingRef.current) return;
+    submittingRef.current = true;
+    void Promise.resolve(onSubmit(interaction, { additionalSymptoms: selected }))
+      .finally(() => { submittingRef.current = false; });
   }
 
   return (

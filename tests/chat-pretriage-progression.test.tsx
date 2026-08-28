@@ -121,8 +121,8 @@ describe("projected conversation interaction controls", () => {
     expect(onSubmit).toHaveBeenCalledWith(scaleInteraction, { intensity: 5 });
   });
 
-  it("uses projected MULTI_SELECT labels, enforces the maximum, and maps None to an empty array", () => {
-    const onSubmit = vi.fn();
+  it("uses projected MULTI_SELECT labels, enforces the maximum, and maps None to an empty array", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
     render(<ConversationInteraction interaction={multiInteraction} onSubmit={onSubmit} />);
 
     fireEvent.click(screen.getByRole("button", { name: /feeling nauseated/i }));
@@ -131,11 +131,31 @@ describe("projected conversation interaction controls", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Choose no more than 2");
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(onSubmit).toHaveBeenLastCalledWith(multiInteraction, { additionalSymptoms: ["NAUSEA", "DIARRHEA"] });
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
 
     fireEvent.click(screen.getByRole("button", { name: /^none/i }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(onSubmit).toHaveBeenLastCalledWith(multiInteraction, { additionalSymptoms: [] });
     expect(JSON.stringify(onSubmit.mock.calls)).not.toContain("NONE");
+  });
+
+  it("locks multi-select changes synchronously when submission begins", () => {
+    let finish!: () => void;
+    const onSubmit = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    render(<ConversationInteraction interaction={multiInteraction} onSubmit={onSubmit} />);
+
+    const nausea = screen.getByRole("button", { name: /feeling nauseated/i });
+    const diarrhea = screen.getByRole("button", { name: /loose stools/i });
+    const submit = screen.getByRole("button", { name: "Continue" });
+    fireEvent.click(nausea);
+    fireEvent.click(submit);
+    fireEvent.click(diarrhea);
+    fireEvent.click(submit);
+
+    expect(onSubmit).toHaveBeenCalledOnce();
+    expect(onSubmit).toHaveBeenCalledWith(multiInteraction, { additionalSymptoms: ["NAUSEA"] });
+    expect(diarrhea).toHaveAttribute("aria-pressed", "false");
+    finish();
   });
 
   it("omits None unless the backend permits an empty selection", () => {

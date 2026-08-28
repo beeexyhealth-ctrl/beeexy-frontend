@@ -631,7 +631,7 @@ textarea { min-height: 112px; resize: vertical; line-height: 1.5; }
 .chat-option-button:hover { border-color: var(--primary-line); }
 .chat-option-button[aria-pressed="true"] { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); }
 .chat-option-button:disabled { opacity: .55; }
-.chat-option-button > span:first-child { font-family: var(--font-display); font-size: 11px; font-weight: 600; }
+.chat-option-button > span:first-child { min-width: 0; font-family: var(--font-display); font-size: 11px; font-weight: 600; overflow-wrap: anywhere; }
 .chat-option-check { display: grid; width: 24px; height: 24px; flex: 0 0 auto; place-items: center; border: 1px solid var(--line-strong); border-radius: 8px; color: transparent; background: #fff; }
 .chat-option-button[aria-pressed="true"] .chat-option-check { border-color: var(--primary); color: #fff; background: var(--primary); }
 .chat-progression-feedback { display: grid; gap: 8px; border: 1px solid var(--primary-line); border-radius: 12px; padding: 10px; background: var(--primary-soft); }

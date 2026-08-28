@@ -60,11 +60,11 @@ type PreTriageContextValue = {
   claim(): Promise<ClaimAnonymousPreTriageResponse | null>;
   clearError(): void;
   complete(signal?: AbortSignal): Promise<NeutralPreTriageResult>;
-  loadResult(sessionId: string): Promise<NeutralPreTriageResult>;
+  loadResult(sessionId: string, signal?: AbortSignal): Promise<NeutralPreTriageResult>;
   loadConversation(sessionId: string, signal?: AbortSignal): Promise<PreTriageConversationProjection>;
   markPendingClaim(): string;
   startFromIntake(text: string, idempotencyKey: string, mode: PreTriageMode, signal?: AbortSignal): Promise<StartPreTriageFromIntakeResponse>;
-  start(pathway: PreTriagePathway, mode: PreTriageMode, patient?: AccessiblePatient | null): Promise<ActivePreTriage>;
+  start(pathway: PreTriagePathway, mode: PreTriageMode, patient?: AccessiblePatient | null, signal?: AbortSignal): Promise<ActivePreTriage>;
   submit(request: SubmitPreTriageAnswersRequest, signal?: AbortSignal): Promise<PreTriageAnswerResponse>;
 };
 
@@ -139,7 +139,7 @@ export function PreTriageProvider({ children }: { children: React.ReactNode }) {
     setError(caught);
   }, [refreshPatients]);
 
-  const start = useCallback(async (pathway: PreTriagePathway, mode: PreTriageMode, patient?: AccessiblePatient | null) => {
+  const start = useCallback(async (pathway: PreTriagePathway, mode: PreTriageMode, patient?: AccessiblePatient | null, signal?: AbortSignal) => {
     begin("starting");
     try {
       if (mode === "authenticated" && authStatus !== "authenticated") throw new BeeexyApiError(401);
@@ -147,14 +147,14 @@ export function PreTriageProvider({ children }: { children: React.ReactNode }) {
         pathway,
         ...(mode === "authenticated" && patient?.accessType === "Managed" ? { patientId: patient.profileId } : {}),
       };
-      const response = await beeexyPhase4Api.startPreTriage(request, mode);
+      const response = await beeexyPhase4Api.startPreTriage(request, mode, signal);
       const anonymousCapability = "anonymousCapability" in response ? response.anonymousCapability : undefined;
       if (mode === "anonymous" && !anonymousCapability) throw new BeeexyApiError(500);
       const access: PreTriageAccess = mode === "anonymous"
         ? { mode: "anonymous", capability: requireCapability(anonymousCapability) }
         : { mode: "authenticated" };
       const conversation = response.conversation
-        ?? await beeexyPhase4Api.getPreTriageConversation(response.sessionId, access);
+        ?? await beeexyPhase4Api.getPreTriageConversation(response.sessionId, access, signal);
       const next: ActivePreTriageInternal = {
         sessionId: response.sessionId,
         mode,
@@ -174,7 +174,7 @@ export function PreTriageProvider({ children }: { children: React.ReactNode }) {
       setClaimRecovered(false);
       return publicState(next);
     } catch (caught) {
-      await handleFailure(caught, active);
+      if (!(caught instanceof Error && caught.name === "AbortError")) await handleFailure(caught, active);
       throw caught;
     } finally {
       finish();
@@ -326,7 +326,7 @@ export function PreTriageProvider({ children }: { children: React.ReactNode }) {
     }
   }, [activePatient?.profileId, begin, finish, handleFailure, persist, primaryPatient?.profileId, requireCurrent]);
 
-  const loadResult = useCallback(async (sessionId: string) => {
+  const loadResult = useCallback(async (sessionId: string, signal?: AbortSignal) => {
     const current = active?.sessionId === sessionId ? requireCurrent() : null;
     const access: PreTriageAccess = current?.mode === "anonymous"
       ? accessFor(current)
@@ -335,7 +335,7 @@ export function PreTriageProvider({ children }: { children: React.ReactNode }) {
         : (() => { throw new BeeexyApiError(404); })();
     begin("loading-result");
     try {
-      const result = await beeexyPhase4Api.getPreTriageResult(sessionId, access);
+      const result = await beeexyPhase4Api.getPreTriageResult(sessionId, access, signal);
       if (current) persist({ ...current, result });
       else setActive({
         sessionId,
@@ -353,7 +353,7 @@ export function PreTriageProvider({ children }: { children: React.ReactNode }) {
       });
       return result;
     } catch (caught) {
-      await handleFailure(caught, current);
+      if (!(caught instanceof Error && caught.name === "AbortError")) await handleFailure(caught, current);
       throw caught;
     } finally {
       finish();
