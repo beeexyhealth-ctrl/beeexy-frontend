@@ -6,6 +6,8 @@ import type {
   PreTriageAnswerResponse,
   PreTriageConversationProjection,
   PreTriageSessionStartResponse,
+  ResolveEducationalVideoOfferRequest,
+  ResolveEducationalVideoOfferResponse,
   StartPreTriageFromIntakeRequest,
   StartPreTriageFromIntakeResponse,
   StartPreTriageRequest,
@@ -87,6 +89,30 @@ export class BeeexyPhase4Api {
     });
   }
 
+  resolveEducationalVideoOffer(
+    sessionId: string,
+    request: ResolveEducationalVideoOfferRequest,
+    access: PreTriageAccess,
+    signal?: AbortSignal,
+  ) {
+    const path = sessionPath(sessionId, "educational-video-offer");
+    if (access.mode === "anonymous") {
+      return this.client.requestPublic<ResolveEducationalVideoOfferResponse>(path, {
+        method: "POST",
+        body: request,
+        headers: capabilityHeaders(access.capability),
+        expectedStatus: 200,
+        signal,
+      });
+    }
+    return this.client.requestAuthenticated<ResolveEducationalVideoOfferResponse>(path, {
+      method: "POST",
+      body: request,
+      expectedStatus: 200,
+      signal,
+    });
+  }
+
   completePreTriage(sessionId: string, access: PreTriageAccess, signal?: AbortSignal): Promise<BeeexyApiResponse<CompletePreTriageResponse>> {
     const path = sessionPath(sessionId, "complete");
     if (access.mode === "anonymous") {
@@ -144,7 +170,7 @@ function capabilityHeaders(capability: string) {
   return { [PRE_TRIAGE_CAPABILITY_HEADER]: capability };
 }
 
-function sessionPath(sessionId: string, action: "answers" | "complete" | "conversation" | "result" | "claim") {
+function sessionPath(sessionId: string, action: "answers" | "educational-video-offer" | "complete" | "conversation" | "result" | "claim") {
   return `/api/v1/pre-triage/sessions/${encodeURIComponent(sessionId)}/${action}`;
 }
 

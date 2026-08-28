@@ -8,11 +8,14 @@ import type {
   AccessiblePatient,
   ClaimAnonymousPreTriageResponse,
   ConversationNextInteraction,
+  EducationalVideoDecision,
+  EducationalVideoOfferInteraction,
   NeutralPreTriageResult,
   PreTriageAnswerResponse,
   PreTriageConversationProjection,
   PreTriagePathway,
   QuestionnaireProgress,
+  ResolveEducationalVideoOfferResponse,
   StructuredPreTriageAnswers,
   StartPreTriageFromIntakeResponse,
   SubmitPreTriageAnswersRequest,
@@ -27,7 +30,13 @@ import {
 } from "./pre-triage-storage";
 
 export type PreTriageMode = "anonymous" | "authenticated";
-export type PreTriageOperation = "starting" | "intaking" | "answering" | "completing" | "loading-conversation" | "loading-result" | "claiming" | null;
+export type PreTriageOperation = "starting" | "intaking" | "answering" | "resolving-video-offer" | "completing" | "loading-conversation" | "loading-result" | "claiming" | null;
+
+export interface EducationalVideoPresentation {
+  decision: EducationalVideoDecision;
+  interaction: EducationalVideoOfferInteraction;
+  optionLabel: string;
+}
 
 export interface ActivePreTriage {
   sessionId: string;
@@ -42,6 +51,8 @@ export interface ActivePreTriage {
   result?: NeutralPreTriageResult;
   pendingClaim: boolean;
   lastAnswerResponse?: PreTriageAnswerResponse;
+  /** Ephemeral presentation state. It is intentionally omitted from browser storage. */
+  educationalVideoPresentation?: EducationalVideoPresentation;
   /** In-memory only; never written to anonymous flow storage. */
   transientUserTurn?: string;
 }
@@ -63,6 +74,7 @@ type PreTriageContextValue = {
   loadResult(sessionId: string, signal?: AbortSignal): Promise<NeutralPreTriageResult>;
   loadConversation(sessionId: string, signal?: AbortSignal): Promise<PreTriageConversationProjection>;
   markPendingClaim(): string;
+  resolveEducationalVideoOffer(decision: EducationalVideoDecision, signal?: AbortSignal): Promise<ResolveEducationalVideoOfferResponse>;
   startFromIntake(text: string, idempotencyKey: string, mode: PreTriageMode, signal?: AbortSignal): Promise<StartPreTriageFromIntakeResponse>;
   start(pathway: PreTriagePathway, mode: PreTriageMode, patient?: AccessiblePatient | null, signal?: AbortSignal): Promise<ActivePreTriage>;
   submit(request: SubmitPreTriageAnswersRequest, signal?: AbortSignal): Promise<PreTriageAnswerResponse>;
@@ -258,6 +270,32 @@ export function PreTriageProvider({ children }: { children: React.ReactNode }) {
     }
   }, [begin, finish, handleFailure, persist, requireCurrent]);
 
+  const resolveEducationalVideoOffer = useCallback(async (
+    decision: EducationalVideoDecision,
+    signal?: AbortSignal,
+  ) => {
+    const current = requireCurrent();
+    const interaction = current.conversation?.nextInteraction;
+    if (!interaction || interaction.type !== "EDUCATIONAL_VIDEO_OFFER") throw new BeeexyApiError(409);
+    if (!interaction.options.some((option) => option.value === decision)) throw new BeeexyApiError(422);
+    begin("resolving-video-offer");
+    try {
+      const response = await beeexyPhase4Api.resolveEducationalVideoOffer(
+        current.sessionId,
+        { decision },
+        accessFor(current),
+        signal,
+      );
+      persist(applyEducationalVideoResolution(current, interaction, response));
+      return response;
+    } catch (caught) {
+      if (!(caught instanceof Error && caught.name === "AbortError")) await handleFailure(caught, current);
+      throw caught;
+    } finally {
+      finish();
+    }
+  }, [begin, finish, handleFailure, persist, requireCurrent]);
+
   const loadConversation = useCallback(async (sessionId: string, signal?: AbortSignal) => {
     const current = active?.sessionId === sessionId ? requireCurrent() : null;
     let access: PreTriageAccess;
@@ -287,6 +325,7 @@ export function PreTriageProvider({ children }: { children: React.ReactNode }) {
         pendingClaim: current?.pendingClaim || false,
         anonymousCapability: current?.anonymousCapability,
         transientUserTurn: current?.transientUserTurn,
+        educationalVideoPresentation: current?.educationalVideoPresentation,
       };
       persist(next);
       if (conversation.state === "COMPLETED" && current?.conversation?.state !== "COMPLETED" && next.mode === "authenticated") {
@@ -429,10 +468,11 @@ export function PreTriageProvider({ children }: { children: React.ReactNode }) {
     loadResult,
     loadConversation,
     markPendingClaim,
+    resolveEducationalVideoOffer,
     start,
     startFromIntake,
     submit,
-  }), [active, error, hydrated, operation, claimConfirmation, claimRecovered, pendingClaimRoute, abandon, claim, complete, loadConversation, loadResult, markPendingClaim, start, startFromIntake, submit]);
+  }), [active, error, hydrated, operation, claimConfirmation, claimRecovered, pendingClaimRoute, abandon, claim, complete, loadConversation, loadResult, markPendingClaim, resolveEducationalVideoOffer, start, startFromIntake, submit]);
 
   return <PreTriageContext.Provider value={value}>{children}</PreTriageContext.Provider>;
 }
@@ -477,6 +517,7 @@ function publicState(active: ActivePreTriageInternal): ActivePreTriage {
     pendingClaim: active.pendingClaim,
     lastAnswerResponse: active.lastAnswerResponse,
     transientUserTurn: active.transientUserTurn,
+    educationalVideoPresentation: active.educationalVideoPresentation,
   };
 }
 
@@ -530,6 +571,26 @@ export function mergeAcceptedAnswers(
   };
 }
 
+export function applyEducationalVideoResolution<TActive extends ActivePreTriage>(
+  current: TActive,
+  interaction: EducationalVideoOfferInteraction,
+  response: ResolveEducationalVideoOfferResponse,
+): TActive & ActivePreTriage {
+  const option = interaction.options.find((candidate) => candidate.value === response.decision);
+  if (!option) throw new BeeexyApiError(500);
+  return {
+    ...current,
+    acceptedAnswers: response.conversation.acceptedValues,
+    progression: progressionFromConversation(response.conversation),
+    conversation: response.conversation,
+    educationalVideoPresentation: {
+      decision: response.decision,
+      interaction,
+      optionLabel: option.label,
+    },
+  };
+}
+
 export function claimedPreTriageState(active: ActivePreTriage, response: ClaimAnonymousPreTriageResponse): ActivePreTriage {
   return { ...active, mode: "authenticated", patientId: response.patientId, pendingClaim: false };
 }
@@ -562,6 +623,14 @@ export function progressionFromConversation(conversation: PreTriageConversationP
   }
 
   const interaction = conversation.nextInteraction;
+  if (interaction?.type === "EDUCATIONAL_VIDEO_OFFER") {
+    return {
+      state: "IN_PROGRESS",
+      answeredRequiredFields,
+      missingRequiredFields: [],
+      readyToComplete: false,
+    };
+  }
   return {
     state: "IN_PROGRESS",
     answeredRequiredFields,
@@ -579,7 +648,7 @@ function acceptedAnswerCodes(values: StructuredPreTriageAnswers): QuestionnaireP
   ];
 }
 
-function legacyQuestionFromInteraction(interaction: ConversationNextInteraction): NonNullable<QuestionnaireProgress["nextQuestion"]> {
+function legacyQuestionFromInteraction(interaction: Exclude<ConversationNextInteraction, EducationalVideoOfferInteraction>): NonNullable<QuestionnaireProgress["nextQuestion"]> {
   if (interaction.inputType === "DURATION") {
     return {
       code: interaction.questionCode,

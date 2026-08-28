@@ -48,6 +48,7 @@ const commonConversation: PreTriageConversationProjection = {
     progress: { completed: 0, total: 3, percentage: 0 },
     acceptedValues: {},
     nextInteraction: {
+      type: "QUESTION",
       field: "duration",
       questionCode: "DURATION",
       prompt: "How long ago did the headache start?",
@@ -98,6 +99,14 @@ const answerResponse: PreTriageAnswerResponse = {
     },
     nextInteraction: undefined,
   },
+};
+
+const videoResolution = {
+  sessionId,
+  decision: "WATCH" as const,
+  resolvedAt: "2026-08-27T18:01:00Z",
+  newlyResolved: true,
+  conversation: commonConversation,
 };
 
 const result: NeutralPreTriageResult = {
@@ -224,6 +233,38 @@ describe("Beeexy Phase 4 API contract", () => {
       intensity: 3,
       additionalSymptoms: ["NAUSEA"],
     });
+  });
+
+  it.each(["WATCH", "SKIP"] as const)("resolves %s with the dedicated endpoint and exact decision-only body", async (decision) => {
+    const response = { ...videoResolution, decision };
+    const fetcher = vi.fn<TestFetch>(async () => json(response));
+    const controller = new AbortController();
+
+    await expect(createApi(fetcher, new MemoryStore(null)).resolveEducationalVideoOffer(
+      sessionId,
+      { decision },
+      { mode: "anonymous", capability },
+      controller.signal,
+    )).resolves.toEqual(response);
+
+    const [url, init] = fetcher.mock.calls[0];
+    expect(url).toBe(`${baseUrl}/api/v1/pre-triage/sessions/${sessionId}/educational-video-offer`);
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(String(init?.body))).toEqual({ decision });
+    expect(Object.keys(JSON.parse(String(init?.body)))).toEqual(["decision"]);
+    expect((init?.headers as Headers).get(PRE_TRIAGE_CAPABILITY_HEADER)).toBe(capability);
+    expect((init?.headers as Headers).get("Authorization")).toBeNull();
+    expect(init?.signal).toBe(controller.signal);
+  });
+
+  it("resolves an authenticated video offer with Bearer and no capability", async () => {
+    const fetcher = vi.fn<TestFetch>(async () => json(videoResolution));
+
+    await createApi(fetcher).resolveEducationalVideoOffer(sessionId, { decision: "WATCH" }, { mode: "authenticated" });
+
+    const init = fetcher.mock.calls[0][1];
+    expect((init?.headers as Headers).get("Authorization")).toBe("Bearer access-a");
+    expect((init?.headers as Headers).get(PRE_TRIAGE_CAPABILITY_HEADER)).toBeNull();
   });
 
   it("completes without a body and preserves whether the backend returned 201", async () => {

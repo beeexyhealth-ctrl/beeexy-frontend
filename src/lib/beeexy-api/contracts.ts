@@ -192,7 +192,8 @@ export interface ClinicalContentStatus {
 
 export type ConversationSessionStatus = "ACTIVE" | "COMPLETED";
 export type ConversationState = "IN_PROGRESS" | "READY_FOR_REVIEW" | "COMPLETED";
-export type ConversationInputType = "DURATION" | "SCALE" | "MULTI_SELECT";
+export type ConversationInputType = "DURATION" | "SCALE" | "MULTI_SELECT" | "SINGLE_SELECT";
+export type EducationalVideoDecision = "WATCH" | "SKIP";
 
 export interface ConversationPathway {
   code: PreTriagePathway;
@@ -210,14 +211,15 @@ export interface ConversationOption<TValue extends string = string> {
   label: string;
 }
 
-interface ConversationInteractionCommon {
+interface ConversationQuestionInteractionCommon {
+  type: "QUESTION";
   questionCode: RequiredAnswerCode;
   prompt: string;
   required: boolean;
 }
 
-export type ConversationNextInteraction =
-  | (ConversationInteractionCommon & {
+export type ConversationQuestionInteraction =
+  | (ConversationQuestionInteractionCommon & {
       field: "duration";
       inputType: "DURATION";
       constraints: {
@@ -227,7 +229,7 @@ export type ConversationNextInteraction =
       };
       options: [];
     })
-  | (ConversationInteractionCommon & {
+  | (ConversationQuestionInteractionCommon & {
       field: "intensity";
       inputType: "SCALE";
       constraints: {
@@ -237,7 +239,7 @@ export type ConversationNextInteraction =
       };
       options: [];
     })
-  | (ConversationInteractionCommon & {
+  | (ConversationQuestionInteractionCommon & {
       field: "additionalSymptoms";
       inputType: "MULTI_SELECT";
       constraints: {
@@ -247,6 +249,30 @@ export type ConversationNextInteraction =
       };
       options: ConversationOption<AdditionalSymptom>[];
     });
+
+export interface EducationalVideo {
+  id: string;
+  title: string;
+  url: string;
+}
+
+export interface EducationalVideoOfferInteraction {
+  type: "EDUCATIONAL_VIDEO_OFFER";
+  field: "educationalVideoDecision";
+  prompt: string;
+  inputType: "SINGLE_SELECT";
+  required: false;
+  constraints: {
+    minimumSelections: 1;
+    maximumSelections: 1;
+    allowsEmptySelection: false;
+  };
+  options: Array<ConversationOption<EducationalVideoDecision>>;
+  video: EducationalVideo;
+  questionCode?: never;
+}
+
+export type ConversationNextInteraction = ConversationQuestionInteraction | EducationalVideoOfferInteraction;
 
 export interface PreTriageConversationProjection {
   sessionId: Uuid;
@@ -362,6 +388,18 @@ export interface PreTriageAnswerResponse {
   progression: QuestionnaireProgress;
   conversation: PreTriageConversationProjection;
   clarification?: IntakeClarification;
+}
+
+export interface ResolveEducationalVideoOfferRequest {
+  decision: EducationalVideoDecision;
+}
+
+export interface ResolveEducationalVideoOfferResponse {
+  sessionId: Uuid;
+  decision: EducationalVideoDecision;
+  resolvedAt: IsoTimestamp;
+  newlyResolved: boolean;
+  conversation: PreTriageConversationProjection;
 }
 
 export type PreTriageIntakeSessionResponse =

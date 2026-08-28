@@ -7,18 +7,22 @@ import {
   type ReactNode,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
 import { Icon } from "@/components/ui/icon";
 import type {
-  ConversationNextInteraction,
+  ConversationQuestionInteraction,
   DurationAnswer,
+  EducationalVideoDecision,
+  EducationalVideoOfferInteraction,
   PreTriageConversationProjection,
   PreTriagePathway,
   RequiredAnswerCode,
   StructuredPreTriageAnswers,
 } from "@/lib/beeexy-api/contracts";
+import type { EducationalVideoPresentation } from "@/features/pre-triage/pre-triage-provider";
 import { ConversationInteraction } from "./conversation-interaction";
 import type { ChatIntakeState } from "./use-chat-intake";
 import { conversationInteractionKey, type ChatProgressionState } from "./use-chat-progression";
@@ -37,6 +41,20 @@ export interface ChatShellError {
   retryable: boolean;
 }
 
+export const EDUCATIONAL_VIDEO_REVEAL_DELAY_MS = 1_500;
+
+type VisualTranscriptExchange = {
+  answeredField: RequiredAnswerCode;
+  assistantPrompt: string;
+  id: string;
+  userAnswer: string;
+};
+
+type VisualTranscriptState = {
+  exchanges: VisualTranscriptExchange[];
+  sessionId: string;
+};
+
 type ChatPreTriageShellProps = {
   backHref: string;
   contextControl?: ReactNode;
@@ -44,6 +62,7 @@ type ChatPreTriageShellProps = {
   error?: ChatShellError | null;
   initialComposerDisabled?: boolean;
   initialComposerHint?: string;
+  educationalVideoPresentation?: EducationalVideoPresentation;
   loading?: boolean;
   onCandidateSelect?: (pathway: PreTriagePathway) => Promise<void> | void;
   onComposerSubmit?: (value: string) => Promise<void> | void;
@@ -53,7 +72,8 @@ type ChatPreTriageShellProps = {
   onProgressionRecoveryRetry?: () => Promise<void> | void;
   onProgressionRetry?: () => Promise<void> | void;
   onRetry?: () => void;
-  onStructuredSubmit?: (interaction: ConversationNextInteraction, answer: StructuredPreTriageAnswers) => Promise<void> | void;
+  onStructuredSubmit?: (interaction: ConversationQuestionInteraction, answer: StructuredPreTriageAnswers) => Promise<void> | void;
+  onVideoDecision?: (interaction: EducationalVideoOfferInteraction, decision: EducationalVideoDecision) => Promise<void> | void;
   progressionState?: ChatProgressionState;
   projection?: PreTriageConversationProjection | null;
   reviewHref?: string;
@@ -69,6 +89,7 @@ export function ChatPreTriageShell({
   error,
   initialComposerDisabled = false,
   initialComposerHint,
+  educationalVideoPresentation,
   loading = false,
   onCandidateSelect,
   onComposerSubmit,
@@ -79,6 +100,7 @@ export function ChatPreTriageShell({
   onProgressionRetry,
   onRetry,
   onStructuredSubmit,
+  onVideoDecision,
   projection,
   progressionState = { kind: "idle" },
   reviewHref,
@@ -89,19 +111,20 @@ export function ChatPreTriageShell({
   const feedRef = useRef<HTMLDivElement>(null);
   const interactionRef = useRef<HTMLDivElement>(null);
   const previousInteractionRef = useRef<string | null>(null);
-  const interactionCode = projection?.nextInteraction?.questionCode || projection?.state || null;
+  const interactionIdentity = conversationInteractionKey(projection)
+    || (projection ? `${projection.sessionId}|${projection.state}` : null);
 
   useEffect(() => {
     const previous = previousInteractionRef.current;
-    previousInteractionRef.current = interactionCode;
-    if (!previous || !interactionCode || previous === interactionCode) return;
+    previousInteractionRef.current = interactionIdentity;
+    if (!previous || !interactionIdentity || previous === interactionIdentity) return;
     const feed = feedRef.current;
     const interaction = interactionRef.current;
     if (!feed || !interaction || feed.scrollHeight - feed.scrollTop - feed.clientHeight > 180) return;
     const reduceMotion = typeof window.matchMedia === "function"
       && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     interaction.scrollIntoView?.({ behavior: reduceMotion ? "auto" : "smooth", block: "nearest" });
-  }, [interactionCode]);
+  }, [interactionIdentity]);
 
   return (
     <main className="chat-pretriage-shell" aria-busy={loading || undefined}>
@@ -118,6 +141,7 @@ export function ChatPreTriageShell({
             entryState={entryState}
             initialComposerDisabled={initialComposerDisabled}
             initialComposerHint={initialComposerHint}
+            educationalVideoPresentation={educationalVideoPresentation}
             interactionRef={interactionRef}
             onCandidateSelect={onCandidateSelect}
             onComposerSubmit={onComposerSubmit}
@@ -127,6 +151,7 @@ export function ChatPreTriageShell({
             onProgressionRecoveryRetry={onProgressionRecoveryRetry}
             onProgressionRetry={onProgressionRetry}
             onStructuredSubmit={onStructuredSubmit}
+            onVideoDecision={onVideoDecision}
             projection={projection}
             progressionState={progressionState}
             reviewHref={reviewHref}
@@ -179,6 +204,7 @@ export function ConversationHeader({
 
 function ConversationContent({
   contextControl,
+  educationalVideoPresentation,
   entryState,
   initialComposerDisabled,
   initialComposerHint,
@@ -191,6 +217,7 @@ function ConversationContent({
   onProgressionRecoveryRetry,
   onProgressionRetry,
   onStructuredSubmit,
+  onVideoDecision,
   projection,
   progressionState,
   reviewHref,
@@ -199,6 +226,7 @@ function ConversationContent({
   transientUserTurn,
 }: {
   contextControl?: ReactNode;
+  educationalVideoPresentation?: EducationalVideoPresentation;
   entryState: ChatIntakeState;
   initialComposerDisabled: boolean;
   initialComposerHint?: string;
@@ -210,7 +238,8 @@ function ConversationContent({
   onPathwaySelect?: (pathway: PreTriagePathway) => Promise<void> | void;
   onProgressionRecoveryRetry?: () => Promise<void> | void;
   onProgressionRetry?: () => Promise<void> | void;
-  onStructuredSubmit?: (interaction: ConversationNextInteraction, answer: StructuredPreTriageAnswers) => Promise<void> | void;
+  onStructuredSubmit?: (interaction: ConversationQuestionInteraction, answer: StructuredPreTriageAnswers) => Promise<void> | void;
+  onVideoDecision?: (interaction: EducationalVideoOfferInteraction, decision: EducationalVideoDecision) => Promise<void> | void;
   projection?: PreTriageConversationProjection | null;
   progressionState: ChatProgressionState;
   reviewHref?: string;
@@ -218,14 +247,36 @@ function ConversationContent({
   startingPathway: PreTriagePathway | null;
   transientUserTurn?: string;
 }) {
-  const [optionLabels, setOptionLabels] = useState<Record<string, string>>({});
+  const [visualTranscript, setVisualTranscript] = useState<VisualTranscriptState>(() => ({
+    exchanges: [],
+    sessionId: projection?.sessionId || "",
+  }));
+  const previousProjectionRef = useRef(projection);
+  const videoPresentationId = educationalVideoPresentation?.decision === "WATCH"
+    ? `${projection?.sessionId}|${educationalVideoPresentation.interaction.video.id}|WATCH`
+    : null;
+  const [revealedVideoPresentationId, setRevealedVideoPresentationId] = useState<string | null>(null);
 
-  function submitStructured(interaction: ConversationNextInteraction, answer: StructuredPreTriageAnswers) {
-    if (interaction.inputType === "MULTI_SELECT") {
-      setOptionLabels(Object.fromEntries(interaction.options.map((option) => [option.value, option.label])));
-    }
+  useEffect(() => {
+    if (!videoPresentationId) return;
+    const timeout = window.setTimeout(() => {
+      setRevealedVideoPresentationId(videoPresentationId);
+    }, EDUCATIONAL_VIDEO_REVEAL_DELAY_MS);
+    return () => window.clearTimeout(timeout);
+  }, [videoPresentationId]);
+
+  useLayoutEffect(() => {
+    const previousProjection = previousProjectionRef.current;
+    previousProjectionRef.current = projection;
+    setVisualTranscript((current) => advanceVisualTranscript(current, previousProjection, projection));
+  }, [projection]);
+
+  function submitStructured(interaction: ConversationQuestionInteraction, answer: StructuredPreTriageAnswers) {
     return onStructuredSubmit?.(interaction, answer);
   }
+
+  const revealClinicalInteraction = !videoPresentationId
+    || revealedVideoPresentationId === videoPresentationId;
 
   if (!projection) {
     const entryPending = entryState.kind === "pending" || entryState.kind === "resolved";
@@ -266,13 +317,47 @@ function ConversationContent({
       <UserMessage text={transientUserTurn || projection.pathway.label} />
       <ConversationAcceptedValueTurns
         key={projection.sessionId}
-        optionLabels={optionLabels}
+        answeredFields={visualTranscript.exchanges.map((exchange) => exchange.answeredField)}
         projection={projection}
         transientUserTurn={transientUserTurn}
       />
+      {educationalVideoPresentation && (
+        <EducationalVideoTranscript presentation={educationalVideoPresentation} />
+      )}
+      {visualTranscript.exchanges.map((exchange) => (
+        <div key={exchange.id}>
+          <AssistantMessage text={exchange.assistantPrompt} />
+          <UserMessage text={exchange.userAnswer} />
+        </div>
+      ))}
 
       <div ref={interactionRef} aria-live="polite">
-        {projection.state === "IN_PROGRESS" && projection.nextInteraction && (
+        {projection.state === "IN_PROGRESS"
+          && projection.nextInteraction?.type === "EDUCATIONAL_VIDEO_OFFER" && (
+          <AssistantMessage text={projection.nextInteraction.prompt}>
+            <InteractionPanel label="Educational video choice">
+              <EducationalVideoOfferControl
+                disabled={progressionState.kind === "submitting"
+                  || progressionState.kind === "recovering"
+                  || progressionState.kind === "recovery-failed"}
+                error={progressionState.kind === "validation" || progressionState.kind === "blocked"
+                  ? progressionState.message
+                  : null}
+                interaction={projection.nextInteraction}
+                onSubmit={onVideoDecision}
+              />
+              <ProgressionFeedback
+                state={progressionState}
+                onRecoveryRetry={onProgressionRecoveryRetry}
+                onRetry={onProgressionRetry}
+              />
+            </InteractionPanel>
+          </AssistantMessage>
+        )}
+
+        {projection.state === "IN_PROGRESS"
+          && projection.nextInteraction?.type === "QUESTION"
+          && revealClinicalInteraction && (
           <AssistantMessage text={projection.nextInteraction.prompt}>
             <InteractionPanel label="Current response">
               <ConversationInteraction
@@ -296,6 +381,12 @@ function ConversationContent({
           </AssistantMessage>
         )}
 
+        {projection.state === "IN_PROGRESS"
+          && projection.nextInteraction?.type === "QUESTION"
+          && !revealClinicalInteraction && (
+          <p className="chat-processing chat-video-next-status" role="status">Preparing the next question</p>
+        )}
+
         {projection.state === "READY_FOR_REVIEW" && (
           <AssistantMessage text="Your information is ready to review.">
             <InteractionPanel label="Review Pre-Triage">
@@ -317,15 +408,15 @@ function ConversationContent({
 }
 
 function ConversationAcceptedValueTurns({
-  optionLabels,
+  answeredFields,
   projection,
   transientUserTurn,
 }: {
-  optionLabels: Readonly<Record<string, string>>;
+  answeredFields: ReadonlyArray<RequiredAnswerCode>;
   projection: PreTriageConversationProjection;
   transientUserTurn?: string;
 }) {
-  const [hiddenFields] = useState<ReadonlyArray<RequiredAnswerCode>>(() => {
+  const [intakeFields] = useState<ReadonlyArray<RequiredAnswerCode>>(() => {
     if (!transientUserTurn) return [];
     const accepted = projection.acceptedValues;
     return [
@@ -334,16 +425,19 @@ function ConversationAcceptedValueTurns({
       ...(accepted.additionalSymptoms !== undefined ? ["ADDITIONAL_SYMPTOMS" as const] : []),
     ];
   });
-  return <AcceptedValueTurns hiddenFields={hiddenFields} optionLabels={optionLabels} projection={projection} />;
+  return (
+    <AcceptedValueTurns
+      hiddenFields={[...intakeFields, ...answeredFields]}
+      projection={projection}
+    />
+  );
 }
 
 function AcceptedValueTurns({
   hiddenFields,
-  optionLabels,
   projection,
 }: {
   hiddenFields: ReadonlyArray<RequiredAnswerCode>;
-  optionLabels: Readonly<Record<string, string>>;
   projection: PreTriageConversationProjection;
 }) {
   const { acceptedValues } = projection;
@@ -355,9 +449,139 @@ function AcceptedValueTurns({
         <UserMessage
           label="Additional symptoms"
           text={acceptedValues.additionalSymptoms.length
-            ? acceptedValues.additionalSymptoms.map((value) => optionLabels[value] || humanizeCode(value)).join(", ")
+            ? acceptedValues.additionalSymptoms.map(humanizeCode).join(", ")
             : "None"}
         />
+      )}
+    </>
+  );
+}
+
+function advanceVisualTranscript(
+  current: VisualTranscriptState,
+  previousProjection?: PreTriageConversationProjection | null,
+  projection?: PreTriageConversationProjection | null,
+): VisualTranscriptState {
+  if (!projection) return current;
+  if (current.sessionId !== projection.sessionId) {
+    return { exchanges: [], sessionId: projection.sessionId };
+  }
+  if (!previousProjection || previousProjection.sessionId !== projection.sessionId) return current;
+
+  const previousIdentity = conversationInteractionKey(previousProjection);
+  if (!previousIdentity || previousIdentity === conversationInteractionKey(projection)) return current;
+  if (current.exchanges.some((exchange) => exchange.id === previousIdentity)) return current;
+
+  const interaction = previousProjection.nextInteraction;
+  if (!interaction || interaction.type !== "QUESTION") return current;
+  const userAnswer = formatAcceptedInteractionAnswer(interaction, projection);
+  if (userAnswer === null) return current;
+
+  return {
+    ...current,
+    exchanges: [
+      ...current.exchanges,
+      {
+        answeredField: interaction.questionCode,
+        assistantPrompt: interaction.prompt,
+        id: previousIdentity,
+        userAnswer,
+      },
+    ],
+  };
+}
+
+function formatAcceptedInteractionAnswer(
+  interaction: ConversationQuestionInteraction,
+  projection: PreTriageConversationProjection,
+) {
+  if (interaction.inputType === "DURATION") {
+    return projection.acceptedValues.duration
+      ? formatDuration(projection.acceptedValues.duration)
+      : null;
+  }
+  if (interaction.inputType === "SCALE") {
+    return projection.acceptedValues.intensity !== undefined
+      ? `${projection.acceptedValues.intensity}`
+      : null;
+  }
+  if (projection.acceptedValues.additionalSymptoms === undefined) return null;
+  if (projection.acceptedValues.additionalSymptoms.length === 0) return "None";
+  const labels = new Map(interaction.options.map((option) => [option.value, option.label]));
+  return projection.acceptedValues.additionalSymptoms
+    .map((value) => labels.get(value) || humanizeCode(value))
+    .join(", ");
+}
+
+function EducationalVideoOfferControl({
+  disabled,
+  error,
+  interaction,
+  onSubmit,
+}: {
+  disabled: boolean;
+  error?: string | null;
+  interaction: EducationalVideoOfferInteraction;
+  onSubmit?: (interaction: EducationalVideoOfferInteraction, decision: EducationalVideoDecision) => Promise<void> | void;
+}) {
+  const selectingRef = useRef(false);
+
+  async function choose(decision: EducationalVideoDecision) {
+    if (disabled || selectingRef.current || !onSubmit) return;
+    selectingRef.current = true;
+    try {
+      await onSubmit(interaction, decision);
+    } finally {
+      selectingRef.current = false;
+    }
+  }
+
+  return (
+    <div className="chat-video-offer-control">
+      <div className="chat-video-offer-actions">
+        {interaction.options.map((option) => (
+          <button
+            className={`button wide chat-video-offer-button ${option.value === "WATCH" ? "primary" : "secondary"}`}
+            disabled={disabled || !onSubmit}
+            key={option.value}
+            type="button"
+            onClick={() => void choose(option.value)}
+          >
+            {option.value === "WATCH" && <Icon name="video" size={18} />}
+            <span>{option.label}</span>
+          </button>
+        ))}
+      </div>
+      {error && <p className="chat-control-error" role="alert">{error}</p>}
+    </div>
+  );
+}
+
+function EducationalVideoTranscript({ presentation }: { presentation: EducationalVideoPresentation }) {
+  return (
+    <>
+      <AssistantMessage text={presentation.interaction.prompt} />
+      <UserMessage text={presentation.optionLabel} />
+      {presentation.decision === "WATCH" && (
+        <article className="chat-turn assistant chat-video-turn" aria-label="Beeexy educational video">
+          <span className="chat-message-avatar" aria-hidden="true"><Icon name="video" size={15} /></span>
+          <div className="chat-message-column">
+            <p className="chat-speaker">Beeexy</p>
+            <div className="chat-video-card">
+              <div className="chat-video-heading">
+                <span aria-hidden="true"><Icon name="video" size={17} /></span>
+                <div>
+                  <p>Educational video</p>
+                  <h2>{presentation.interaction.video.title}</h2>
+                </div>
+              </div>
+              <video controls preload="metadata" playsInline aria-label={presentation.interaction.video.title}>
+                <source src={presentation.interaction.video.url} type="video/mp4" />
+                Your browser does not support HTML5 video.
+              </video>
+            </div>
+          </div>
+        </article>
       )}
     </>
   );

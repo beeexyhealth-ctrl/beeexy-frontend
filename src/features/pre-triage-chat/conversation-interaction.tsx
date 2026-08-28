@@ -4,7 +4,7 @@ import { type FormEvent, useId, useMemo, useRef, useState } from "react";
 import { Icon } from "@/components/ui/icon";
 import type {
   AdditionalSymptom,
-  ConversationNextInteraction,
+  ConversationQuestionInteraction,
   DurationUnit,
   StructuredPreTriageAnswers,
 } from "@/lib/beeexy-api/contracts";
@@ -12,8 +12,8 @@ import type {
 type ConversationInteractionProps = {
   disabled?: boolean;
   error?: string | null;
-  interaction: ConversationNextInteraction;
-  onSubmit: (interaction: ConversationNextInteraction, answer: StructuredPreTriageAnswers) => Promise<void> | void;
+  interaction: ConversationQuestionInteraction;
+  onSubmit: (interaction: ConversationQuestionInteraction, answer: StructuredPreTriageAnswers) => Promise<void> | void;
   pending?: boolean;
 };
 
@@ -40,12 +40,12 @@ export function ConversationInteraction({
   );
 }
 
-type InteractionOf<TType extends ConversationNextInteraction["inputType"]> = Extract<
-  ConversationNextInteraction,
+type InteractionOf<TType extends ConversationQuestionInteraction["inputType"]> = Extract<
+  ConversationQuestionInteraction,
   { inputType: TType }
 >;
 
-type InteractionControlProps<TType extends ConversationNextInteraction["inputType"]> = {
+type InteractionControlProps<TType extends ConversationQuestionInteraction["inputType"]> = {
   disabled: boolean;
   error?: string | null;
   interaction: InteractionOf<TType>;
@@ -125,8 +125,12 @@ function ScaleInteraction({ disabled, error, interaction, onSubmit, pending }: I
   const errorId = `${id}-error`;
   const { maximum, minimum, step } = interaction.constraints;
   const [value, setValue] = useState(minimum);
-  const progress = ((value - minimum) / Math.max(maximum - minimum, step || 1)) * 100;
-  const emphasisHue = Math.round(228 - Math.max(0, Math.min(1, progress / 100)) * 210);
+  const scaleValues = useMemo(() => {
+    const count = Math.floor((maximum - minimum) / step) + 1;
+    return Array.from({ length: count }, (_, index) => minimum + index * step)
+      .filter((scaleValue) => scaleValue <= maximum);
+  }, [maximum, minimum, step]);
+  const presentation = painLevelPresentation(value);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -135,10 +139,30 @@ function ScaleInteraction({ disabled, error, interaction, onSubmit, pending }: I
   }
 
   return (
-    <form className="chat-structured-control chat-scale-control" onSubmit={submit} aria-label="Answer scale">
-      <div className="chat-scale-value" aria-live="polite">
-        <span>Selected value</span>
-        <output htmlFor={`${id}-range`}>{value}</output>
+    <form
+      className="chat-structured-control chat-scale-control"
+      data-pain-band={presentation.band}
+      onSubmit={submit}
+      aria-label="Answer pain intensity"
+      style={{
+        "--pain-level-color": presentation.accent,
+        "--pain-level-button": presentation.button,
+        "--pain-scale-columns": scaleValues.length,
+      } as React.CSSProperties}
+    >
+      <div className="chat-pain-reading">
+        <span>Selected pain level</span>
+        <output
+          aria-label={`Selected pain level: ${value} out of ${maximum}`}
+          aria-live="polite"
+          htmlFor={`${id}-range`}
+        >
+          <strong>{value}</strong><span>/{maximum}</span>
+        </output>
+      </div>
+      <div className="chat-pain-labels" aria-hidden="true">
+        <span>No pain</span>
+        <span>Severe pain</span>
       </div>
       <input
         id={`${id}-range`}
@@ -149,19 +173,41 @@ function ScaleInteraction({ disabled, error, interaction, onSubmit, pending }: I
         step={step}
         value={value}
         disabled={disabled}
-        aria-label="Select a value"
+        aria-label="Pain intensity"
         aria-describedby={error ? errorId : undefined}
-        aria-valuetext={`${value} on a scale from ${minimum} to ${maximum}`}
-        style={{ "--chat-scale-progress": `${progress}%`, "--chat-scale-color": `hsl(${emphasisHue} 72% 52%)` } as React.CSSProperties}
+        aria-valuetext={`Pain level ${value} out of ${maximum}`}
         onChange={(event) => setValue(Number(event.target.value))}
       />
-      <div className="chat-scale-limits" aria-hidden="true"><span>{minimum}</span><span>{maximum}</span></div>
+      <div className="chat-pain-numbers" aria-hidden="true">
+        {scaleValues.map((scaleValue) => (
+          <span className={scaleValue === value ? "selected" : undefined} key={scaleValue}>{scaleValue}</span>
+        ))}
+      </div>
       {error && <p className="chat-control-error" id={errorId} role="alert">{error}</p>}
-      <button className="button primary wide" type="submit" disabled={disabled}>
-        {pending ? "Saving..." : "Continue"}
+      <button className="button wide chat-pain-confirm" type="submit" disabled={disabled}>
+        {!pending && <Icon name="check" size={18} />}
+        <span>{pending ? `Saving level ${value}...` : `Confirm level ${value}`}</span>
       </button>
     </form>
   );
+}
+
+const PAIN_LEVEL_PRESENTATION = [
+  { accent: "#047857", button: "#047857", band: "low" },
+  { accent: "#15803d", button: "#166534", band: "low" },
+  { accent: "#4d7c0f", button: "#3f6212", band: "low" },
+  { accent: "#a16207", button: "#854d0e", band: "medium" },
+  { accent: "#b45309", button: "#92400e", band: "medium" },
+  { accent: "#c2410c", button: "#9a3412", band: "medium" },
+  { accent: "#d94a0b", button: "#9a3412", band: "high" },
+  { accent: "#dc2626", button: "#b91c1c", band: "high" },
+  { accent: "#c81e1e", button: "#a61b1b", band: "high" },
+  { accent: "#b91c1c", button: "#991b1b", band: "high" },
+] as const;
+
+function painLevelPresentation(value: number) {
+  const index = Math.max(0, Math.min(PAIN_LEVEL_PRESENTATION.length - 1, Math.round(value) - 1));
+  return PAIN_LEVEL_PRESENTATION[index];
 }
 
 function MultiSelectInteraction({ disabled, error, interaction, onSubmit, pending }: InteractionControlProps<"MULTI_SELECT">) {

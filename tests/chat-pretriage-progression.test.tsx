@@ -8,6 +8,7 @@ import { ConversationInteraction } from "@/features/pre-triage-chat/conversation
 import { useChatProgression } from "@/features/pre-triage-chat/use-chat-progression";
 import type {
   ConversationNextInteraction,
+  ConversationQuestionInteraction,
   PreTriageAnswerResponse,
   PreTriageConversationProjection,
   SubmitPreTriageAnswersRequest,
@@ -15,6 +16,7 @@ import type {
 import { BeeexyApiError, BeeexyNetworkError } from "@/lib/beeexy-api/problem-details";
 
 const durationInteraction: Extract<ConversationNextInteraction, { inputType: "DURATION" }> = {
+  type: "QUESTION",
   field: "duration",
   questionCode: "DURATION",
   prompt: "How long has this been happening?",
@@ -25,16 +27,18 @@ const durationInteraction: Extract<ConversationNextInteraction, { inputType: "DU
 };
 
 const scaleInteraction: Extract<ConversationNextInteraction, { inputType: "SCALE" }> = {
+  type: "QUESTION",
   field: "intensity",
   questionCode: "INTENSITY",
   prompt: "Choose the intensity.",
   inputType: "SCALE",
   required: true,
-  constraints: { minimum: 1, maximum: 7, step: 2 },
+  constraints: { minimum: 1, maximum: 10, step: 1 },
   options: [],
 };
 
 const multiInteraction: Extract<ConversationNextInteraction, { inputType: "MULTI_SELECT" }> = {
+  type: "QUESTION",
   field: "additionalSymptoms",
   questionCode: "ADDITIONAL_SYMPTOMS",
   prompt: "Select any additional symptoms.",
@@ -107,17 +111,48 @@ describe("projected conversation interaction controls", () => {
     expect(onSubmit).toHaveBeenCalledWith(durationInteraction, { duration: { value: 2.5, unit: "DAYS" } });
   });
 
-  it("renders SCALE from projected min, max, and step and submits the visible selected number", () => {
+  it("renders the dedicated 1–10 pain selector and does not submit while the value changes", () => {
     const onSubmit = vi.fn();
     render(<ConversationInteraction interaction={scaleInteraction} onSubmit={onSubmit} />);
-    const range = screen.getByRole("slider", { name: "Select a value" });
+    const form = screen.getByRole("form", { name: "Answer pain intensity" });
+    const range = screen.getByRole("slider", { name: "Pain intensity" });
+    const output = screen.getByLabelText("Selected pain level: 1 out of 10");
 
     expect(range).toHaveAttribute("min", "1");
-    expect(range).toHaveAttribute("max", "7");
-    expect(range).toHaveAttribute("step", "2");
+    expect(range).toHaveAttribute("max", "10");
+    expect(range).toHaveAttribute("step", "1");
+    expect(output).toHaveTextContent("1/10");
+    expect(form).toHaveAttribute("data-pain-band", "low");
+    expect(screen.getByRole("button", { name: "Confirm level 1" })).toBeInTheDocument();
+    const numericScale = document.querySelector(".chat-pain-numbers") as HTMLElement;
+    expect(within(numericScale).getAllByText(/^(?:[1-9]|10)$/)).toHaveLength(10);
+    const lowButtonColor = form.style.getPropertyValue("--pain-level-button");
+
     fireEvent.change(range, { target: { value: "5" } });
-    expect(screen.getByText("5")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(screen.getByLabelText("Selected pain level: 5 out of 10")).toHaveTextContent("5/10");
+    expect(screen.getByRole("button", { name: "Confirm level 5" })).toBeInTheDocument();
+    expect(form).toHaveAttribute("data-pain-band", "medium");
+    const mediumButtonColor = form.style.getPropertyValue("--pain-level-button");
+    expect(mediumButtonColor).not.toBe(lowButtonColor);
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    fireEvent.change(range, { target: { value: "9" } });
+    expect(screen.getByLabelText("Selected pain level: 9 out of 10")).toHaveTextContent("9/10");
+    expect(screen.getByRole("button", { name: "Confirm level 9" })).toBeInTheDocument();
+    expect(form).toHaveAttribute("data-pain-band", "high");
+    expect(form.style.getPropertyValue("--pain-level-button")).toBe("#a61b1b");
+    expect(form.style.getPropertyValue("--pain-level-button")).not.toBe(mediumButtonColor);
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("submits the selected pain level as the unchanged integer intensity answer", () => {
+    const onSubmit = vi.fn();
+    render(<ConversationInteraction interaction={scaleInteraction} onSubmit={onSubmit} />);
+
+    fireEvent.change(screen.getByRole("slider", { name: "Pain intensity" }), { target: { value: "5" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm level 5" }));
+
+    expect(onSubmit).toHaveBeenCalledOnce();
     expect(onSubmit).toHaveBeenCalledWith(scaleInteraction, { intensity: 5 });
   });
 
@@ -172,7 +207,7 @@ describe("projected conversation interaction controls", () => {
   it("fails safely for an unknown runtime input type", () => {
     render(
       <ConversationInteraction
-        interaction={{ ...durationInteraction, inputType: "DATE" } as unknown as ConversationNextInteraction}
+        interaction={{ ...durationInteraction, inputType: "DATE" } as unknown as ConversationQuestionInteraction}
         onSubmit={vi.fn()}
       />,
     );
@@ -242,7 +277,7 @@ describe("projected conversation interaction controls", () => {
         transientUserTurn="It has hurt for two days at five out of ten."
       />,
     );
-    expect(screen.getByText("Nausea")).toBeInTheDocument();
+    expect(screen.getByText("Feeling nauseated")).toBeInTheDocument();
     expect(screen.getByText("75%")).toBeInTheDocument();
   });
 });
@@ -260,7 +295,7 @@ function ProgressionHarness({
   return (
     <div>
       <p data-testid="state">{progression.state.kind}</p>
-      <button type="button" onClick={() => void progression.submit(current.nextInteraction!, { additionalSymptoms: [] })}>Submit projected answer</button>
+      <button type="button" onClick={() => void progression.submit(current.nextInteraction as ConversationQuestionInteraction, { additionalSymptoms: [] })}>Submit projected answer</button>
       <button type="button" onClick={() => void progression.retryAnswer()}>Retry exact answer</button>
       <button type="button" onClick={() => void progression.retryRecovery()}>Retry recovery</button>
     </div>
@@ -415,11 +450,11 @@ describe("conversation answer orchestration", () => {
     fireEvent.change(screen.getByLabelText("Duration"), { target: { value: "2" } });
     fireEvent.change(screen.getByLabelText("Unit"), { target: { value: "DAYS" } });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("slider", { name: "Select a value" });
+    await screen.findByRole("slider", { name: "Pain intensity" });
     expect(screen.getByText("67%")).toBeInTheDocument();
 
     fireEvent.change(screen.getByRole("slider"), { target: { value: "5" } });
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm level 5" }));
     await screen.findByRole("form", { name: "Answer symptom options" });
     fireEvent.click(screen.getByRole("button", { name: /feeling nauseated/i }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));

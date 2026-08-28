@@ -23,6 +23,7 @@ const projection: PreTriageConversationProjection = {
     intensity: 6,
   },
   nextInteraction: {
+    type: "QUESTION",
     field: "additionalSymptoms",
     questionCode: "ADDITIONAL_SYMPTOMS",
     prompt: "Backend supplied this exact additional symptom question",

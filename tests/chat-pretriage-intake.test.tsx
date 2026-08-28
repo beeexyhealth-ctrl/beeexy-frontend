@@ -62,6 +62,7 @@ const resolved: Extract<StartPreTriageFromIntakeResponse, { resolution: "RESOLVE
     progress: { completed: 2, total: 3, percentage: 67 },
     acceptedValues: { duration: { value: 2, unit: "DAYS" }, intensity: 6 },
     nextInteraction: {
+      type: "QUESTION",
       field: "additionalSymptoms",
       questionCode: "ADDITIONAL_SYMPTOMS",
       prompt: "Backend prompt",

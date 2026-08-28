@@ -134,7 +134,7 @@ export function PreTriageChatStartScreen() {
 export function PreTriageChatSessionScreen() {
   const sessionId = useParams<{ sessionId: string }>().sessionId;
   const { status: authStatus } = useAuth();
-  const { active, error, hydrated, loadConversation, submit } = usePreTriage();
+  const { active, error, hydrated, loadConversation, resolveEducationalVideoOffer, submit } = usePreTriage();
   const projection = active?.sessionId === sessionId ? active.conversation : null;
   const [bootstrap, setBootstrap] = useState<{
     sessionId: string;
@@ -172,6 +172,7 @@ export function PreTriageChatSessionScreen() {
   const progression = useChatProgression({
     projection,
     recoverConversation: loadConversation,
+    resolveVideoOffer: resolveEducationalVideoOffer,
     submitAnswer: submit,
   });
   const loading = !hydrated || authStatus === "bootstrapping" || (!projection
@@ -191,11 +192,13 @@ export function PreTriageChatSessionScreen() {
         onProgressionRetry={progression.retryAnswer}
         onRetry={shellError?.retryable ? retry : undefined}
         onStructuredSubmit={progression.submit}
+        onVideoDecision={progression.submitVideoDecision}
         projection={projection}
         progressionState={progression.state}
         reviewHref={`/pre-triage/${encodeURIComponent(sessionId)}/review`}
         resultHref={`/pre-triage/${encodeURIComponent(sessionId)}/result`}
         transientUserTurn={active?.sessionId === sessionId ? active.transientUserTurn : undefined}
+        educationalVideoPresentation={active?.sessionId === sessionId ? active.educationalVideoPresentation : undefined}
       />
     </FlowFrame>
   );

@@ -45,6 +45,7 @@ function conversationProjection(
     progress: { completed: 0, total: 3, percentage: 0 },
     acceptedValues: {},
     nextInteraction: {
+      type: "QUESTION",
       field: "duration",
       questionCode: "DURATION",
       prompt: "How long ago did it start?",

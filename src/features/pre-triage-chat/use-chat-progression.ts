@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
-  ConversationNextInteraction,
+  ConversationQuestionInteraction,
+  EducationalVideoDecision,
+  EducationalVideoOfferInteraction,
   PreTriageAnswerResponse,
   PreTriageConversationProjection,
   StructuredPreTriageAnswers,
@@ -20,15 +22,27 @@ export type ChatProgressionState =
   | { kind: "recovery-failed"; message: string };
 
 type AnswerAttempt = {
+  kind: "answer";
   answer: StructuredPreTriageAnswers;
   identity: string;
-  interaction: ConversationNextInteraction;
+  interaction: ConversationQuestionInteraction;
   sessionId: string;
 };
+
+type VideoOfferAttempt = {
+  kind: "video-offer";
+  decision: EducationalVideoDecision;
+  identity: string;
+  interaction: EducationalVideoOfferInteraction;
+  sessionId: string;
+};
+
+type ProgressionAttempt = AnswerAttempt | VideoOfferAttempt;
 
 type UseChatProgressionOptions = {
   projection?: PreTriageConversationProjection | null;
   recoverConversation: (sessionId: string, signal?: AbortSignal) => Promise<PreTriageConversationProjection>;
+  resolveVideoOffer?: (decision: EducationalVideoDecision, signal?: AbortSignal) => Promise<unknown>;
   submitAnswer: (request: SubmitPreTriageAnswersRequest, signal?: AbortSignal) => Promise<PreTriageAnswerResponse>;
 };
 
@@ -39,17 +53,18 @@ export function conversationInteractionKey(projection?: PreTriageConversationPro
     projection.sessionId,
     projection.state,
     projection.questionnaire.version,
-    interaction.questionCode,
+    interaction.type,
     interaction.field,
     interaction.inputType,
+    ...(interaction.type === "QUESTION" ? [interaction.questionCode] : []),
   ].join("|");
 }
 
-export function useChatProgression({ projection, recoverConversation, submitAnswer }: UseChatProgressionOptions) {
+export function useChatProgression({ projection, recoverConversation, resolveVideoOffer, submitAnswer }: UseChatProgressionOptions) {
   const [state, setState] = useState<ChatProgressionState>({ kind: "idle" });
   const projectionRef = useRef(projection);
   const inFlightRef = useRef(false);
-  const attemptRef = useRef<AnswerAttempt | null>(null);
+  const attemptRef = useRef<ProgressionAttempt | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const previousIdentityRef = useRef(conversationInteractionKey(projection));
 
@@ -69,7 +84,7 @@ export function useChatProgression({ projection, recoverConversation, submitAnsw
     }
   }, [projection]);
 
-  const reconcile = useCallback(async (attempt: AnswerAttempt, allowExactRetry: boolean) => {
+  const reconcile = useCallback(async (attempt: ProgressionAttempt, allowExactRetry: boolean) => {
     setState({ kind: "recovering" });
     const controller = new AbortController();
     controllerRef.current = controller;
@@ -85,7 +100,7 @@ export function useChatProgression({ projection, recoverConversation, submitAnsw
         attemptRef.current = attempt;
         setState({
           kind: "retryable",
-          message: "We confirmed this question still needs an answer. You can safely retry the same response.",
+          message: "We confirmed this response is still needed. You can safely retry the same choice.",
         });
       } else {
         attemptRef.current = null;
@@ -106,7 +121,7 @@ export function useChatProgression({ projection, recoverConversation, submitAnsw
     }
   }, [recoverConversation]);
 
-  const execute = useCallback(async (attempt: AnswerAttempt) => {
+  const execute = useCallback(async (attempt: ProgressionAttempt) => {
     if (inFlightRef.current) return;
     const current = projectionRef.current;
     if (!current || conversationInteractionKey(current) !== attempt.identity) {
@@ -120,7 +135,12 @@ export function useChatProgression({ projection, recoverConversation, submitAnsw
     const controller = new AbortController();
     controllerRef.current = controller;
     try {
-      await submitAnswer({ structured: attempt.answer }, controller.signal);
+      if (attempt.kind === "answer") {
+        await submitAnswer({ structured: attempt.answer }, controller.signal);
+      } else {
+        if (!resolveVideoOffer) throw new BeeexyApiError(500);
+        await resolveVideoOffer(attempt.decision, controller.signal);
+      }
       attemptRef.current = null;
       setState({ kind: "idle" });
     } catch (caught) {
@@ -148,10 +168,10 @@ export function useChatProgression({ projection, recoverConversation, submitAnsw
       controllerRef.current = null;
       inFlightRef.current = false;
     }
-  }, [reconcile, submitAnswer]);
+  }, [reconcile, resolveVideoOffer, submitAnswer]);
 
   const submit = useCallback(async (
-    interaction: ConversationNextInteraction,
+    interaction: ConversationQuestionInteraction,
     answer: StructuredPreTriageAnswers,
   ) => {
     const current = projectionRef.current;
@@ -160,7 +180,24 @@ export function useChatProgression({ projection, recoverConversation, submitAnsw
       setState({ kind: "blocked", message: "That question is no longer current. Continue with the response shown now." });
       return;
     }
-    await execute({ answer, identity, interaction, sessionId: current.sessionId });
+    await execute({ kind: "answer", answer, identity, interaction, sessionId: current.sessionId });
+  }, [execute]);
+
+  const submitVideoDecision = useCallback(async (
+    interaction: EducationalVideoOfferInteraction,
+    decision: EducationalVideoDecision,
+  ) => {
+    const current = projectionRef.current;
+    const identity = conversationInteractionKey(current);
+    if (!current || !identity || current.nextInteraction !== interaction) {
+      setState({ kind: "blocked", message: "That offer is no longer current. Continue with the response shown now." });
+      return;
+    }
+    if (!interaction.options.some((option) => option.value === decision)) {
+      setState({ kind: "validation", message: "Choose one of the video options shown." });
+      return;
+    }
+    await execute({ kind: "video-offer", decision, identity, interaction, sessionId: current.sessionId });
   }, [execute]);
 
   const retryAnswer = useCallback(async () => {
@@ -180,7 +217,7 @@ export function useChatProgression({ projection, recoverConversation, submitAnsw
     }
   }, [reconcile, state.kind]);
 
-  return { retryAnswer, retryRecovery, state, submit };
+  return { retryAnswer, retryRecovery, state, submit, submitVideoDecision };
 }
 
 function validationMessage(errorCode?: string) {
