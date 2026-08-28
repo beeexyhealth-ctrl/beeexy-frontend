@@ -21,11 +21,9 @@ export function PrivateAccessScreen() {
     event.preventDefault();
     if (submitting || rateLimited) return;
     const accepted = await login({ username, password, keyword });
-    if (accepted) {
-      setUsername("");
-      setPassword("");
-      setKeyword("");
-    }
+    setPassword("");
+    setKeyword("");
+    if (accepted) setUsername("");
   }
 
   return (
@@ -130,7 +128,7 @@ export function PrivateAccessScreen() {
 
         <footer className="private-access-footer">
           <Icon name="lock" size={14} />
-          <p>Access details are not saved. Demo activity is shared across visitors and is not automatically reset.</p>
+          <p>Access details are not saved. Your session remains private to this browser until you sign out.</p>
         </footer>
       </div>
     </main>

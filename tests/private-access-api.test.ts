@@ -33,7 +33,7 @@ describe("Beeexy Private Access API", () => {
     const api = new BeeexyPrivateAccessApi(new BeeexyApiClient(baseUrl, new MemorySessionStore(), fetcher));
     const credentials = { username: " demo-user ", password: "pass word", keyword: "KeyWord" };
 
-    await api.loginPrivateAccess(credentials);
+    await expect(api.loginPrivateAccess(credentials)).resolves.toEqual({ kind: "legacy" });
     await expect(api.getPrivateAccessSession()).resolves.toEqual({ authenticated: true, expiresAt: null });
     await api.logoutPrivateAccess();
 
@@ -44,9 +44,45 @@ describe("Beeexy Private Access API", () => {
     ]);
     expect(fetcher.mock.calls[0][1]?.body).toBe(JSON.stringify(credentials));
     expect(fetcher.mock.calls[0][1]?.method).toBe("POST");
+    expect((fetcher.mock.calls[0][1]?.headers as Headers).get("Accept")).toBe("application/json, application/problem+json");
     expect(fetcher.mock.calls[1][1]?.method).toBe("GET");
     expect(fetcher.mock.calls[2][1]?.method).toBe("POST");
     for (const [, init] of fetcher.mock.calls) expect(init?.credentials).toBe("include");
+  });
+
+  it("parses a Database login from status 200 and preserves its Account identity", async () => {
+    const authentication: AuthenticationResponse = {
+      accessToken: "tester-access-token",
+      refreshToken: "tester-refresh-token",
+      accessTokenExpiresAt: "2099-01-01T00:00:00Z",
+      refreshTokenExpiresAt: "2099-02-01T00:00:00Z",
+      account: { accountId: "tester-account", profileId: "tester-profile", beeexyId: "BXY-TESTER" },
+    };
+    const fetcher = vi.fn<TestFetch>(async () => new Response(JSON.stringify(authentication), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }));
+    const api = new BeeexyPrivateAccessApi(new BeeexyApiClient(baseUrl, new MemorySessionStore(), fetcher));
+
+    await expect(api.loginPrivateAccess({ username: "tester", password: "password", keyword: "keyword" }))
+      .resolves.toEqual({ kind: "database", authentication });
+
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(fetcher.mock.calls[0][1]?.credentials).toBe("include");
+  });
+
+  it("rejects malformed or unexpected successful login responses", async () => {
+    const malformedFetcher = vi.fn<TestFetch>(async () => jsonResponse({ accessToken: "incomplete" }, 200));
+    const malformedApi = new BeeexyPrivateAccessApi(new BeeexyApiClient(baseUrl, new MemorySessionStore(), malformedFetcher));
+
+    await expect(malformedApi.loginPrivateAccess({ username: "tester", password: "password", keyword: "keyword" }))
+      .rejects.toMatchObject({ status: 502 });
+
+    const unexpectedFetcher = vi.fn<TestFetch>(async () => jsonResponse({ ok: true }, 201));
+    const unexpectedApi = new BeeexyPrivateAccessApi(new BeeexyApiClient(baseUrl, new MemorySessionStore(), unexpectedFetcher));
+
+    await expect(unexpectedApi.loginPrivateAccess({ username: "tester", password: "password", keyword: "keyword" }))
+      .rejects.toMatchObject({ status: 201 });
   });
 
   it("creates a Demo Guest session with a bodyless credentialed request", async () => {

@@ -11,11 +11,13 @@ import {
 } from "react";
 import {
   beeexyPrivateAccessApi,
+  type PrivateAccessLoginOutcome,
   type PrivateAccessLoginRequest,
   type PrivateAccessSessionStatus,
 } from "@/lib/beeexy-api/private-access-api";
 import { subscribeToPrivateAccessRequired } from "@/lib/beeexy-api/private-access-events";
 import { BeeexyApiError } from "@/lib/beeexy-api/problem-details";
+import { beeexySessionStore } from "@/lib/beeexy-api/session-storage";
 import { PrivateAccessLoading } from "./private-access-loading";
 import { PrivateAccessScreen } from "./private-access-screen";
 
@@ -30,9 +32,11 @@ export interface PrivateAccessFeedback {
 type PrivateAccessContextValue = {
   exiting: boolean;
   feedback: PrivateAccessFeedback | null;
+  loginOutcome: PrivateAccessLoginOutcome | null;
   retryAfterSeconds: number;
   session: PrivateAccessSessionStatus | null;
   state: PrivateAccessState;
+  clearLoginOutcome(): void;
   exitDemo(logoutBeeexy: () => Promise<void>): Promise<void>;
   login(request: PrivateAccessLoginRequest): Promise<boolean>;
   logout(): Promise<void>;
@@ -44,6 +48,7 @@ const PrivateAccessContext = createContext<PrivateAccessContextValue | null>(nul
 export function PrivateAccessProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<PrivateAccessState>("checking");
   const [session, setSession] = useState<PrivateAccessSessionStatus | null>(null);
+  const [loginOutcome, setLoginOutcome] = useState<PrivateAccessLoginOutcome | null>(null);
   const [feedback, setFeedback] = useState<PrivateAccessFeedback | null>(null);
   const [exiting, setExiting] = useState(false);
   const [retryUntil, setRetryUntil] = useState<number | null>(null);
@@ -55,6 +60,7 @@ export function PrivateAccessProvider({ children }: { children: React.ReactNode 
     operationInFlight.current = true;
     setState("checking");
     setFeedback(null);
+    setLoginOutcome(null);
 
     try {
       const nextSession = await beeexyPrivateAccessApi.getPrivateAccessSession();
@@ -80,6 +86,7 @@ export function PrivateAccessProvider({ children }: { children: React.ReactNode 
   useEffect(() => subscribeToPrivateAccessRequired(() => {
     operationInFlight.current = false;
     setSession(null);
+    setLoginOutcome(null);
     setRetryUntil(null);
     setRetryAfterSeconds(0);
     setFeedback({
@@ -106,13 +113,15 @@ export function PrivateAccessProvider({ children }: { children: React.ReactNode 
   const login = useCallback(async (request: PrivateAccessLoginRequest) => {
     if (operationInFlight.current || (retryUntil !== null && retryUntil > Date.now())) return false;
     operationInFlight.current = true;
+    beeexySessionStore.clear();
     setFeedback(null);
     setState("submitting");
     let unlocked = false;
 
     try {
-      await beeexyPrivateAccessApi.loginPrivateAccess(request);
+      const outcome = await beeexyPrivateAccessApi.loginPrivateAccess(request);
       setSession(null);
+      setLoginOutcome(outcome);
       setRetryUntil(null);
       setRetryAfterSeconds(0);
       setState("unlocked");
@@ -120,10 +129,11 @@ export function PrivateAccessProvider({ children }: { children: React.ReactNode 
       return true;
     } catch (error) {
       setSession(null);
+      setLoginOutcome(null);
       if (error instanceof BeeexyApiError && error.status === 400) {
         setFeedback({ kind: "invalid-input", message: "Complete all three fields and check their length before trying again." });
       } else if (error instanceof BeeexyApiError && error.status === 401) {
-        setFeedback({ kind: "invalid-credentials", message: "The access credentials are incorrect. Check your information and try again." });
+        setFeedback({ kind: "invalid-credentials", message: "The private access credentials are invalid." });
       } else if (error instanceof BeeexyApiError && error.status === 429) {
         const seconds = retryDelayInSeconds(error.retryAfter);
         setRetryUntil(Date.now() + seconds * 1_000);
@@ -144,12 +154,13 @@ export function PrivateAccessProvider({ children }: { children: React.ReactNode 
     operationInFlight.current = true;
     try {
       await beeexyPrivateAccessApi.logoutPrivateAccess();
+    } finally {
       setSession(null);
+      setLoginOutcome(null);
       setFeedback(null);
       setRetryUntil(null);
       setRetryAfterSeconds(0);
       setState("locked");
-    } finally {
       operationInFlight.current = false;
     }
   }, []);
@@ -171,6 +182,7 @@ export function PrivateAccessProvider({ children }: { children: React.ReactNode 
       });
     } finally {
       setSession(null);
+      setLoginOutcome(null);
       setRetryUntil(null);
       setRetryAfterSeconds(0);
       setState("locked");
@@ -182,14 +194,16 @@ export function PrivateAccessProvider({ children }: { children: React.ReactNode 
   const value = useMemo<PrivateAccessContextValue>(() => ({
     exiting,
     feedback,
+    loginOutcome,
     retryAfterSeconds,
     session,
     state,
+    clearLoginOutcome: () => setLoginOutcome(null),
     exitDemo,
     login,
     logout,
     retrySessionCheck: checkSession,
-  }), [checkSession, exitDemo, exiting, feedback, login, logout, retryAfterSeconds, session, state]);
+  }), [checkSession, exitDemo, exiting, feedback, login, loginOutcome, logout, retryAfterSeconds, session, state]);
 
   return (
     <PrivateAccessContext.Provider value={value}>

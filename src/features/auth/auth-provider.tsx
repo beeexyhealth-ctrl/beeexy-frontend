@@ -4,7 +4,10 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { beeexyAuthApi } from "@/lib/beeexy-api/auth-api";
 import type { AuthenticationResponse, CurrentAccount, CurrentPatient } from "@/lib/beeexy-api/contracts";
 import { BeeexyApiError } from "@/lib/beeexy-api/problem-details";
-import { isPrivateAccessRequiredError } from "@/lib/beeexy-api/private-access-events";
+import {
+  isPrivateAccessRequiredError,
+  subscribeToPrivateAccessRequired,
+} from "@/lib/beeexy-api/private-access-events";
 import {
   beeexySessionStore,
   type BeeexySession,
@@ -66,6 +69,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw error;
     }
   }, [clearState]);
+
+  useEffect(() => subscribeToPrivateAccessRequired(clearState), [clearState]);
 
   const retryBootstrap = useCallback(async () => {
     if (!beeexySessionStore.read()) {

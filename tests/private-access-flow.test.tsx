@@ -84,7 +84,7 @@ describe("Private Access form", () => {
   it("renders all secret fields and submits the exact, unnormalized payload once", async () => {
     privateAccessApi.getPrivateAccessSession
       .mockResolvedValueOnce({ authenticated: false, expiresAt: null });
-    privateAccessApi.loginPrivateAccess.mockResolvedValueOnce(undefined);
+    privateAccessApi.loginPrivateAccess.mockResolvedValueOnce({ kind: "legacy" });
     const localStorageSpy = vi.spyOn(Storage.prototype, "setItem");
     renderGate();
     await screen.findByLabelText("Username");
@@ -106,8 +106,8 @@ describe("Private Access form", () => {
     let resolveLogin!: () => void;
     privateAccessApi.getPrivateAccessSession
       .mockResolvedValueOnce({ authenticated: false, expiresAt: null });
-    privateAccessApi.loginPrivateAccess.mockImplementationOnce(() => new Promise<void>((resolve) => {
-      resolveLogin = resolve;
+    privateAccessApi.loginPrivateAccess.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveLogin = () => resolve({ kind: "legacy" });
     }));
     renderGate();
     await screen.findByLabelText("Username");
@@ -132,12 +132,26 @@ describe("Private Access form", () => {
 
     await fillAndSubmit("shared-user-secret", "shared-password-secret", "shared-keyword-secret");
 
-    expect(await screen.findByText(/access credentials are incorrect/i)).toBeInTheDocument();
+    expect(await screen.findByText(/private access credentials are invalid/i)).toBeInTheDocument();
     const feedback = container.querySelector(".private-access-feedback")?.textContent || "";
     expect(feedback).not.toContain("shared-user-secret");
     expect(feedback).not.toContain("shared-password-secret");
     expect(feedback).not.toContain("shared-keyword-secret");
     expect(feedback).not.toContain("server detail");
+  });
+
+  it("shows a generic request error for a 400 response and clears submitted secrets", async () => {
+    privateAccessApi.getPrivateAccessSession.mockResolvedValueOnce({ authenticated: false, expiresAt: null });
+    privateAccessApi.loginPrivateAccess.mockRejectedValueOnce(new BeeexyApiError(400));
+    renderGate();
+    await screen.findByLabelText("Username");
+
+    await fillAndSubmit();
+
+    expect(await screen.findByText(/complete all three fields/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Username")).toHaveValue("demo-user");
+    expect(screen.getByLabelText("Password")).toHaveValue("");
+    expect(screen.getByLabelText("Keyword")).toHaveValue("");
   });
 
   it("respects Retry-After and distinguishes a network failure", async () => {

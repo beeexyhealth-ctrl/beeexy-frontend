@@ -13,31 +13,42 @@ type DemoGuestFailure = "unavailable" | "temporary";
 
 export function DemoGuestBoundary({ children }: { children: React.ReactNode }) {
   const { hydrateAuthentication, status } = useAuth();
-  const { exiting } = usePrivateAccess();
+  const {
+    clearLoginOutcome,
+    exiting,
+    loginOutcome,
+    logout: resetPrivateAccess,
+  } = usePrivateAccess();
   const [failure, setFailure] = useState<DemoGuestFailure | null>(null);
   const requestInFlight = useRef(false);
 
-  const requestDemoGuest = useCallback(async () => {
-    if (requestInFlight.current || exiting) return;
+  const finishPrivateAccessLogin = useCallback(async () => {
+    if (requestInFlight.current || exiting || !loginOutcome) return;
     requestInFlight.current = true;
     setFailure(null);
 
     try {
-      const response = await beeexyPrivateAccessApi.createDemoGuestSession();
-      await hydrateAuthentication(response);
+      const authentication = loginOutcome.kind === "database"
+        ? loginOutcome.authentication
+        : await beeexyPrivateAccessApi.createDemoGuestSession();
+      await hydrateAuthentication(authentication);
+      clearLoginOutcome();
     } catch (error) {
       if (isPrivateAccessRequiredError(error)) return;
       setFailure(error instanceof BeeexyApiError && error.status === 503 ? "unavailable" : "temporary");
     } finally {
       requestInFlight.current = false;
     }
-  }, [exiting, hydrateAuthentication]);
+  }, [clearLoginOutcome, exiting, hydrateAuthentication, loginOutcome]);
 
   useEffect(() => {
     if (status !== "unauthenticated" || exiting || failure) return;
-    const frame = requestAnimationFrame(() => void requestDemoGuest());
+    const frame = requestAnimationFrame(() => {
+      if (loginOutcome) void finishPrivateAccessLogin();
+      else void resetPrivateAccess().catch(() => undefined);
+    });
     return () => cancelAnimationFrame(frame);
-  }, [exiting, failure, requestDemoGuest, status]);
+  }, [exiting, failure, finishPrivateAccessLogin, loginOutcome, resetPrivateAccess, status]);
 
   if (status === "authenticated" || status === "error") return children;
   if (failure) {
@@ -55,7 +66,7 @@ export function DemoGuestBoundary({ children }: { children: React.ReactNode }) {
               ? "The shared demo account needs attention from the Beeexy team. Please try again later."
               : "Check the connection and try again. Your private access remains active."}
           </p>
-          <button className="entry-primary-button" type="button" onClick={() => void requestDemoGuest()}>
+          <button className="entry-primary-button" type="button" onClick={() => void finishPrivateAccessLogin()}>
             Try again
           </button>
         </section>
