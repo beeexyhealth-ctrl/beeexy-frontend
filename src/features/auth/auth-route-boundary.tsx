@@ -17,8 +17,15 @@ export function isGuestPreTriageRoute(pathname: string) {
   return pathname.startsWith("/pre-triage/") && !pathname.endsWith("/claim");
 }
 
+export function isPublicDirectoryRoute(pathname: string) {
+  return pathname === "/doctors"
+    || pathname === "/clinics"
+    || /^\/doctors\/[^/]+$/.test(pathname)
+    || /^\/clinics\/[^/]+$/.test(pathname);
+}
+
 export function isPublicRoute(pathname: string) {
-  return PUBLIC_ENTRY_ROUTES.has(pathname) || isGuestPreTriageRoute(pathname);
+  return PUBLIC_ENTRY_ROUTES.has(pathname) || isGuestPreTriageRoute(pathname) || isPublicDirectoryRoute(pathname);
 }
 
 export function postAuthDestination(pendingClaimRoute: string | null) {

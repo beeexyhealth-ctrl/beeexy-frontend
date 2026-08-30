@@ -49,8 +49,8 @@ const assistants: Array<{
     href: "/doctors",
     icon: "stethoscope",
     title: "Find a Doctor",
-    description: "Find the right specialist, compare profiles and book your visit.",
-    action: "Explore doctors",
+    description: "Browse synthetic demo doctors and clinics by specialty, language, insurance, or location.",
+    action: "Explore directory",
     badge: "New",
     className: "doctor-tool",
   },
@@ -137,6 +137,7 @@ export function HomeDashboard({ configured, email, name, signedIn }: HomeDashboa
         </Link>
         {!signedIn && <Link href="/login" className="button primary wide drawer-signin" onClick={() => setMenuOpen(false)}>Sign in or create account</Link>}
         <div className="drawer-group"><p>Preferences</p><DrawerLink href="/settings" icon="settings" label="Settings" close={() => setMenuOpen(false)} /><DrawerLink href="/notifications" icon="bell" label="Notifications" close={() => setMenuOpen(false)} /></div>
+        <div className="drawer-group"><p>Find care</p><DrawerLink href="/doctors" icon="stethoscope" label="Doctor & clinic directory" close={() => setMenuOpen(false)} /></div>
         <div className="drawer-group"><p>Your health</p><DrawerLink href="/my-health" icon="heart" label="My Health" close={() => setMenuOpen(false)} /><DrawerLink href="/my-health/circle" icon="users" label="My Circle" close={() => setMenuOpen(false)} /></div>
         <div className="drawer-group"><p>About</p><DrawerLink href="/settings#privacy" icon="shield" label="Privacy & Security" close={() => setMenuOpen(false)} /><DrawerLink href="/settings#help" icon="info" label="Help & Support" close={() => setMenuOpen(false)} /></div>
         <p className="drawer-version">Beeexy · Version 1.0 PWA</p>

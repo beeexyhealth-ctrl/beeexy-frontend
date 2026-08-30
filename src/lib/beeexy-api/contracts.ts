@@ -66,6 +66,141 @@ export interface ProblemDetails {
   correlationId?: string;
 }
 
+export interface ClinicQuery {
+  cursor?: string;
+  pageSize?: number;
+  code?: string;
+  locality?: string;
+  administrativeArea?: string;
+  country?: string;
+}
+
+export interface ClinicSummary {
+  clinicId: string;
+  code: string;
+  name: string;
+}
+
+export interface ClinicPage {
+  items: ClinicSummary[];
+  nextCursor: string | null;
+}
+
+export interface ClinicLocation {
+  locationId: string;
+  name: string;
+  locality: string;
+  administrativeArea: string;
+  country: string;
+  timeZone: string;
+}
+
+export interface ClinicDetail {
+  clinicId: string;
+  code: string;
+  name: string;
+  locations: ClinicLocation[];
+}
+
+export interface DoctorQuery {
+  cursor?: string;
+  pageSize?: number;
+  specialtyCode?: string;
+  languageCode?: string;
+  locality?: string;
+  administrativeArea?: string;
+  country?: string;
+  insurancePlanCode?: string;
+}
+
+export interface DirectoryCatalogValue {
+  code: string;
+  name: string;
+}
+
+export type DoctorSpecialty = DirectoryCatalogValue;
+export type DoctorLanguage = DirectoryCatalogValue;
+export type StoredInsuranceParticipation = DirectoryCatalogValue;
+
+export interface DoctorAffiliationLocation {
+  locationId: string;
+  name: string;
+  locality: string;
+  administrativeArea: string;
+  country: string;
+  timeZone: string;
+}
+
+export interface DoctorAffiliation {
+  clinicId: string;
+  clinicCode: string;
+  clinicName: string;
+  location: DoctorAffiliationLocation | null;
+}
+
+export interface VerifiedDemoCredential {
+  name: string;
+}
+
+export interface DoctorProfile {
+  doctorId: string;
+  code: string;
+  displayName: string;
+  specialties: DoctorSpecialty[];
+  languages: DoctorLanguage[];
+  affiliations: DoctorAffiliation[];
+  storedInsuranceParticipations: StoredInsuranceParticipation[];
+  credentials: VerifiedDemoCredential[];
+}
+
+export type DoctorMatchFactorState = "matched" | "not_matched" | "not_applicable";
+
+export type DoctorMatchFactorCode =
+  | "specialty_exact"
+  | "language_exact"
+  | "location_exact"
+  | "stored_insurance_participation_exact";
+
+export type DoctorMatchRuleVersion = "2026.08.29-demo.1";
+
+export type DoctorMatchSemanticsVersion =
+  | "exact_canonical_doctor_specialty_relationship_v1"
+  | "exact_canonical_doctor_language_relationship_v1"
+  | "exact_same_eligible_affiliation_location_fields_v1"
+  | "exact_stored_doctor_insurance_participation_v1";
+
+export interface DoctorMatchExplanationValue {
+  key: string;
+  value: string;
+}
+
+export interface DoctorMatchFactor {
+  factorCode: DoctorMatchFactorCode;
+  semanticsVersion: DoctorMatchSemanticsVersion;
+  configuredWeightPoints: number;
+  state: DoctorMatchFactorState;
+  contributionPoints: number;
+  explanationCode: string;
+  explanationData: DoctorMatchExplanationValue[];
+}
+
+export interface DoctorMatch {
+  ruleVersion: DoctorMatchRuleVersion;
+  matchScore: number;
+  factors: DoctorMatchFactor[];
+}
+
+export interface DoctorSearchItem extends DoctorProfile {
+  match?: DoctorMatch;
+}
+
+export interface DoctorPage {
+  items: DoctorSearchItem[];
+  nextCursor: string | null;
+}
+
+export type DoctorDetail = DoctorProfile;
+
 export type RelationshipType =
   | "Parent"
   | "LegalGuardian"

@@ -1,102 +1,242 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { FlowFrame } from "@/components/layout/flow-frame";
 import { Icon } from "@/components/ui/icon";
-import type { Doctor } from "@/types/domain";
+import {
+  DEMO_INSURANCE_PLANS,
+  DEMO_LANGUAGES,
+  DEMO_LOCATIONS,
+  DEMO_SPECIALTIES,
+  demoCatalogLabel,
+  demoLocationFromLabel,
+  demoLocationLabel,
+  selectedDemoLocationLabel,
+} from "@/features/directories/demo-presentation-catalog";
+import { DirectoryDisclaimer, DirectoryError, DirectoryHeader, DirectorySkeleton } from "@/features/directories/directory-shared";
+import type { DoctorMatchFactor, DoctorQuery, DoctorSearchItem } from "@/lib/beeexy-api/contracts";
+import { beeexyPhase7Api } from "@/lib/beeexy-api/phase-7-api";
+import { BeeexyApiError } from "@/lib/beeexy-api/problem-details";
 
-type MatchScreen = "urgency" | "modality" | "insurance" | "loading" | "list";
+const PAGE_SIZE = 20;
+type DoctorCriteria = Omit<DoctorQuery, "cursor" | "pageSize">;
+type SearchError = { kind: "cursor" | "validation" | "generic"; message: string };
+type DemoSelectOption = { label: string; value: string };
 
-export function DoctorDirectory({ doctors, initialMatch = false }: { doctors: Doctor[]; initialMatch?: boolean }) {
-  const [screen, setScreen] = useState<MatchScreen>(initialMatch ? "urgency" : "list");
-  const [urgency, setUrgency] = useState("");
-  const [modality, setModality] = useState("No preference");
-  const [insurance, setInsurance] = useState("");
-  const [specialty, setSpecialty] = useState("All");
-  const [language, setLanguage] = useState("All");
+const emptyCriteria: DoctorCriteria = {
+  specialtyCode: undefined,
+  languageCode: undefined,
+  locality: undefined,
+  administrativeArea: undefined,
+  country: undefined,
+  insurancePlanCode: undefined,
+};
+
+export function DoctorDirectory() {
+  const [criteria, setCriteria] = useState<DoctorCriteria>(emptyCriteria);
+  const [draft, setDraft] = useState<DoctorCriteria>(emptyCriteria);
+  const [items, setItems] = useState<DoctorSearchItem[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<SearchError | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const requestRef = useRef(0);
+
+  const requestPage = useCallback(async (nextCriteria: DoctorCriteria, cursor?: string, append = false) => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    const requestId = ++requestRef.current;
+    abortRef.current = controller;
+    try {
+      const page = await beeexyPhase7Api.searchDoctors({ ...nextCriteria, pageSize: PAGE_SIZE, cursor }, controller.signal);
+      if (controller.signal.aborted || requestId !== requestRef.current) return;
+      setItems((current) => append ? [...current, ...page.items] : page.items);
+      setNextCursor(page.nextCursor);
+    } catch (reason) {
+      if (controller.signal.aborted || requestId !== requestRef.current) return;
+      const nextError = doctorSearchError(reason, Boolean(cursor));
+      if (nextError.kind === "cursor") {
+        setItems([]);
+        setNextCursor(null);
+      }
+      setError(nextError);
+    } finally {
+      if (requestId === requestRef.current) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
+    }
+  }, []);
 
   useEffect(() => {
-    if (screen !== "loading") return;
-    const timer = window.setTimeout(() => setScreen("list"), 1_150);
-    return () => window.clearTimeout(timer);
-  }, [screen]);
+    const frame = requestAnimationFrame(() => void requestPage(emptyCriteria));
+    return () => {
+      cancelAnimationFrame(frame);
+      abortRef.current?.abort();
+    };
+  }, [requestPage]);
 
-  const specialties = ["All", ...new Set(doctors.map((doctor) => doctor.specialty))];
-  const languages = ["All", ...new Set(doctors.flatMap((doctor) => doctor.languages))];
-  const filtered = useMemo(() => doctors.filter((doctor) => {
-    const specialtyMatch = specialty === "All" || doctor.specialty === specialty;
-    const languageMatch = language === "All" || doctor.languages.includes(language);
-    const modalityMatch = modality === "No preference" || modality === "In person" || doctor.videoVisit;
-    const insuranceMatch = !insurance || insurance === "Self pay" || doctor.insurances.some((item) => item.toLowerCase().includes(insurance.toLowerCase()));
-    return specialtyMatch && languageMatch && modalityMatch && insuranceMatch;
-  }), [doctors, insurance, language, modality, specialty]);
-
-  const step = screen === "urgency" ? 1 : screen === "modality" ? 2 : screen === "insurance" ? 3 : 0;
-  const headerTitle = screen === "list" ? "Find a doctor" : screen === "loading" ? "Finding your matches" : "Find a doctor";
-  const headerSub = screen === "list" ? `${filtered.length} specialists available` : "Quick clinical match";
-
-  function selectAndAdvance(value: string, next: MatchScreen, setter: (value: string) => void) {
-    setter(value);
-    window.setTimeout(() => setScreen(next), 180);
+  function startSearch(nextCriteria: DoctorCriteria) {
+    setError(null);
+    setLoading(true);
+    setItems([]);
+    setNextCursor(null);
+    void requestPage(nextCriteria);
   }
 
-  function goBack() {
-    if (screen === "modality") setScreen("urgency");
-    else if (screen === "insurance") setScreen("modality");
-    else if (screen === "list" && initialMatch) setScreen("insurance");
-    else window.history.back();
+  function loadMore() {
+    if (!nextCursor) return;
+    setError(null);
+    setLoadingMore(true);
+    void requestPage(criteria, nextCursor, true);
   }
+
+  function applyFilters(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setCriteria(draft);
+    startSearch(draft);
+  }
+
+  function clearFilters() {
+    setDraft(emptyCriteria);
+    setCriteria(emptyCriteria);
+    startSearch(emptyCriteria);
+  }
+
+  const matchingActive = Object.values(criteria).some(Boolean);
 
   return (
-    <FlowFrame className="doctor-flow-frame">
-      <main className="flow-shell doctor-flow">
-        <header className="flow-header doctor-flow-header">
-          <div className="flow-header-row"><button className="icon-button" aria-label="Go back" onClick={goBack}><Icon name="arrow-left" size={18} /></button><div><h1>{headerTitle}</h1><p>{headerSub}</p></div></div>
-          {step > 0 && <div className="match-progress" aria-label={`Step ${step} of 3`}><span className={step >= 1 ? "active" : ""} /><span className={step >= 2 ? "active" : ""} /><span className={step >= 3 ? "active" : ""} /></div>}
-        </header>
+    <FlowFrame className="phase-seven-frame">
+      <main className="flow-shell phase-seven-directory">
+        <DirectoryHeader active="doctors" />
+        <section className="phase-seven-scroll">
+          <div className="directory-intro">
+            <span><Icon name="stethoscope" size={21} /></span>
+            <div><p className="directory-kicker">Doctor directory</p><h2>Find a doctor</h2><p>Browse the demo directory by specialty, language, insurance, or location.</p></div>
+          </div>
+          <DoctorFilterForm draft={draft} onChange={setDraft} onSubmit={applyFilters} onClear={clearFilters} hasFilters={Object.values(draft).some(Boolean)} />
+          <DirectoryDisclaimer />
+          <div className="directory-result-heading" aria-live="polite">
+            <div><h2>{matchingActive ? "Your matches" : "All doctors"}</h2><p>{matchingActive ? "Based on the filters you selected" : "Browse the available demo profiles"}</p></div>
+          </div>
 
-        {screen === "urgency" && <MatchStep eyebrow="Step 1 of 3" title={<>How <em>soon</em> would you like to be seen?</>} helper="We’ll prioritize doctors with availability that fits your needs."><MatchOptions options={[{ label: "As soon as possible", detail: "Today or tomorrow", icon: "activity" }, { label: "Within the next 2 weeks", detail: "More appointment choices", icon: "calendar" }, { label: "I’m flexible", detail: "Show the best overall matches", icon: "clock" }]} selected={urgency} onSelect={(value) => selectAndAdvance(value, "modality", setUrgency)} /></MatchStep>}
-        {screen === "modality" && <MatchStep eyebrow="Step 2 of 3" title={<>How would you prefer to <em>meet</em>?</>} helper="You can change this filter later."><MatchOptions options={[{ label: "In person", detail: "At a nearby clinic", icon: "map-pin" }, { label: "Video visit", detail: "From wherever you are", icon: "video" }, { label: "No preference", detail: "Show all available options", icon: "stethoscope" }]} selected={modality} onSelect={(value) => selectAndAdvance(value, "insurance", setModality)} /></MatchStep>}
-        {screen === "insurance" && <section className="flow-body match-step"><p className="eyebrow">Step 3 of 3</p><h2>Which <em>insurance</em> will you use?</h2><p>We’ll show providers who accept your plan.</p><label className="search-field"><Icon name="search" size={17} /><input aria-label="Search insurance" value={insurance} onChange={(event) => setInsurance(event.target.value)} placeholder="Search your insurance plan" /></label><div className="insurance-list">{["Aetna", "BlueCross BlueShield", "Cigna", "UnitedHealthcare", "Medicare", "Self pay"].map((item) => <button key={item} className={insurance === item ? "selected" : ""} onClick={() => setInsurance(item)}><span>{item.charAt(0)}</span><strong>{item}</strong>{insurance === item ? <Icon name="check" size={16} /> : <Icon name="chevron-right" size={15} />}</button>)}</div><button className="button primary wide" disabled={!insurance.trim()} onClick={() => setScreen("loading")}>Find my matches <Icon name="search" size={15} /></button></section>}
-        {screen === "loading" && <section className="doctor-loading"><div className="match-loader"><Icon name="stethoscope" size={25} /></div><h2>Finding your best matches…</h2><p>Comparing specialty, availability, location and your preferences.</p><div className="loading-lines"><span /><span /><span /></div></section>}
-        {screen === "list" && <DoctorList doctors={filtered} languages={languages} language={language} setLanguage={setLanguage} specialties={specialties} specialty={specialty} setSpecialty={setSpecialty} contextual={initialMatch} modality={modality} setModality={setModality} />}
+          {loading && <DirectorySkeleton />}
+          {!loading && error && <DirectoryError message={error.message} retryLabel={error.kind === "cursor" ? "Restart search" : "Try again"} onRetry={() => startSearch(criteria)} />}
+          {!loading && !error && items.length === 0 && <div className="phase-seven-state"><span><Icon name="search" size={22} /></span><h2>{matchingActive ? "No doctors match these filters." : "No doctors are available."}</h2><p>{matchingActive ? "Try changing or clearing a filter." : "Try loading the directory again shortly."}</p>{matchingActive && <button className="button secondary" type="button" onClick={clearFilters}>Clear filters</button>}</div>}
+          {!loading && !error && items.length > 0 && <div className="phase-seven-list">{items.map((doctor) => <DoctorCard doctor={doctor} key={doctor.doctorId} />)}</div>}
+          {!loading && !error && nextCursor && <button className="button secondary wide directory-load-more" type="button" disabled={loadingMore} aria-busy={loadingMore} onClick={loadMore}>{loadingMore ? "Loading more…" : "Load more doctors"}</button>}
+        </section>
       </main>
     </FlowFrame>
   );
 }
 
-function MatchStep({ children, eyebrow, helper, title }: { children: React.ReactNode; eyebrow: string; helper: string; title: React.ReactNode }) {
-  return <section className="flow-body match-step"><p className="eyebrow">{eyebrow}</p><h2>{title}</h2><p>{helper}</p>{children}</section>;
-}
-
-function MatchOptions({ onSelect, options, selected }: { onSelect: (value: string) => void; options: Array<{ label: string; detail: string; icon: "activity" | "calendar" | "clock" | "map-pin" | "video" | "stethoscope" }>; selected: string }) {
-  return <div className="match-options">{options.map((option) => <button key={option.label} className={selected === option.label ? "selected" : ""} onClick={() => onSelect(option.label)}><span><Icon name={option.icon} size={19} /></span><span><strong>{option.label}</strong><small>{option.detail}</small></span>{selected === option.label ? <Icon name="check" size={16} /> : <Icon name="chevron-right" size={16} />}</button>)}</div>;
-}
-
-function DoctorList({ contextual, doctors, language, languages, modality, setLanguage, setModality, setSpecialty, specialties, specialty }: {
-  contextual: boolean;
-  doctors: Doctor[];
-  language: string;
-  languages: string[];
-  modality: string;
-  setLanguage: (value: string) => void;
-  setModality: (value: string) => void;
-  setSpecialty: (value: string) => void;
-  specialties: string[];
-  specialty: string;
+function DoctorFilterForm({ draft, hasFilters, onChange, onClear, onSubmit }: {
+  draft: DoctorCriteria;
+  hasFilters: boolean;
+  onChange: (criteria: DoctorCriteria) => void;
+  onClear: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
-  return <section className="doctor-list-screen">
-    {contextual && <div className="clinical-context"><span><Icon name="sparkles" size={16} /></span><div><strong>Matched to your pre-triage</strong><p>Headache · Neurology and primary care</p></div><span className="context-count">{doctors.length} matches</span></div>}
-    <div className="directory-segment" aria-label="Visit type"><button className={modality === "In person" ? "active" : ""} onClick={() => setModality("In person")}>In person</button><button className={modality === "Video visit" ? "active" : ""} onClick={() => setModality("Video visit")}>Video visit</button><button className={modality === "No preference" ? "active" : ""} onClick={() => setModality("No preference")}>All</button></div>
-    <div className="filter-row" aria-label="Specialty filters">{specialties.map((item) => <button key={item} className={specialty === item ? "filter-chip selected" : "filter-chip"} onClick={() => setSpecialty(item)}>{item}</button>)}</div>
-    <div className="filter-row language-filters" aria-label="Language filters">{languages.map((item) => <button key={item} className={language === item ? "filter-chip selected" : "filter-chip"} onClick={() => setLanguage(item)}>{item}</button>)}</div>
-    <div className="directory-heading"><div><h2>{contextual ? "Recommended for you" : "Browse specialists"}</h2><p>Sorted by fit, availability and distance</p></div></div>
-    <div className="doctor-list">{doctors.length ? doctors.map((doctor, index) => <DoctorCard doctor={doctor} index={index} key={doctor.id} />) : <div className="empty-state"><h2>No exact matches</h2><p>Try another visit type, specialty or language.</p><button className="button secondary" onClick={() => { setSpecialty("All"); setLanguage("All"); setModality("No preference"); }}>Clear filters</button></div>}</div>
-    <p className="directory-disclaimer">Provider profiles and availability shown here are synthetic demo data.</p>
-  </section>;
+  const selectedLocation = selectedDemoLocationLabel(draft);
+
+  function changeLocation(label: string) {
+    const location = demoLocationFromLabel(label);
+    onChange({
+      ...draft,
+      locality: location?.locality,
+      administrativeArea: location?.administrativeArea,
+      country: location?.country,
+    });
+  }
+
+  return (
+    <form className="directory-filter-panel" onSubmit={onSubmit}>
+      <div className="specialty-browser" role="group" aria-labelledby="specialty-browser-heading">
+        <p className="specialty-browser-heading" id="specialty-browser-heading">Browse by specialty</p>
+        <div className="specialty-chip-list">
+          <button type="button" className={!draft.specialtyCode ? "selected" : ""} aria-pressed={!draft.specialtyCode} onClick={() => onChange({ ...draft, specialtyCode: undefined })}>All specialties</button>
+          {DEMO_SPECIALTIES.map((option) => <button type="button" key={option.value} className={draft.specialtyCode === option.value ? "selected" : ""} aria-pressed={draft.specialtyCode === option.value} onClick={() => onChange({ ...draft, specialtyCode: option.value })}><Icon name="stethoscope" size={14} />{option.label}</button>)}
+        </div>
+      </div>
+      <details className="directory-filters" open>
+        <summary><span><Icon name="search" size={16} />Filters</span><Icon name="chevron-down" size={16} /></summary>
+        <div className="directory-filter-body">
+          <div className="directory-filter-grid">
+            <FilterSelect label="Language" value={draft.languageCode ?? ""} options={DEMO_LANGUAGES} placeholder="Any language" onChange={(value) => onChange({ ...draft, languageCode: value || undefined })} />
+            <FilterSelect label="Insurance" value={draft.insurancePlanCode ?? ""} options={DEMO_INSURANCE_PLANS} placeholder="Any listed plan" onChange={(value) => onChange({ ...draft, insurancePlanCode: value || undefined })} />
+            <FilterSelect label="Location" value={selectedLocation} options={DEMO_LOCATIONS.map(({ label }) => ({ label, value: label }))} placeholder="Any location" onChange={changeLocation} />
+          </div>
+          <div className="directory-filter-actions"><button className="button primary" type="submit">Apply filters</button><button className="button quiet" type="button" disabled={!hasFilters} onClick={onClear}>Clear</button></div>
+        </div>
+      </details>
+    </form>
+  );
 }
 
-function DoctorCard({ doctor, index }: { doctor: Doctor; index: number }) {
-  return <article className="doctor-card"><span className="match-score"><Icon name="sparkles" size={10} />{doctor.aiMatchScore || Math.max(72, 94 - index * 5)}% match</span><div className="doctor-summary"><div className="doctor-avatar photo-avatar" role="img" aria-label={`Portrait of ${doctor.name}`} style={doctor.photoUrl ? { backgroundImage: `url(${doctor.photoUrl})` } : undefined}>{!doctor.photoUrl && doctor.initials}</div><div className="doctor-card-copy"><h2>{doctor.name}, MD</h2><p>{doctor.specialty} · {doctor.subspecialty}</p><div className="doctor-meta"><span className="rating"><Icon name="star" size={10} />{doctor.rating} ({doctor.reviewCount})</span><span><Icon name="map-pin" size={10} />{doctor.distanceMiles} mi</span></div></div></div><p className="doctor-tagline">{doctor.tagline || doctor.bio}</p><div className="doctor-tags"><span>{doctor.videoVisit ? "Video available" : "In person"}</span><span>{doctor.languages.slice(0, 2).join(" · ")}</span>{doctor.boardCertified && <span>Board certified</span>}</div><div className="next-available"><span><Icon name="clock" size={13} /></span><div><small>Next available</small><strong>{index === 0 ? "Today · 4:00 PM" : index === 1 ? "Tomorrow · 10:00 AM" : "This week"}</strong></div></div><div className="doctor-actions"><Link className="button secondary" href={`/doctors/${doctor.id}`}>View profile</Link><Link className="button primary" href={`/doctors/${doctor.id}/book`}>Book</Link></div></article>;
+function FilterSelect({ label, onChange, options, placeholder, value }: {
+  label: string;
+  onChange: (value: string) => void;
+  options: readonly DemoSelectOption[];
+  placeholder: string;
+  value: string;
+}) {
+  return <label><span>{label}</span><span className="directory-select"><select value={value} onChange={(event) => onChange(event.target.value)}><option value="">{placeholder}</option>{options.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select><Icon name="chevron-down" size={14} /></span></label>;
+}
+
+function DoctorCard({ doctor }: { doctor: DoctorSearchItem }) {
+  const firstAffiliation = doctor.affiliations[0];
+  const specialties = doctor.specialties.map((item) => demoCatalogLabel(item.code, item.name));
+  const languages = doctor.languages.map((item) => demoCatalogLabel(item.code, item.name));
+  const insurance = doctor.storedInsuranceParticipations.map((item) => demoCatalogLabel(item.code, item.name));
+
+  return (
+    <article className="phase-seven-card doctor-directory-card">
+      <div className="phase-seven-card-head"><span className="directory-avatar" aria-hidden="true">{initials(doctor.displayName)}</span><div><h3>{doctor.displayName}</h3><p>{specialties.join(" · ") || "Specialty not listed"}</p></div>{doctor.match && <span className="backend-match-score"><small>Match score</small><strong>{doctor.match.matchScore} / 100</strong></span>}</div>
+      <div className="doctor-directory-meta">
+        {languages.length > 0 && <p><Icon name="message" size={14} /><span><strong>Languages</strong>{languages.join(" · ")}</span></p>}
+        {firstAffiliation && <p><Icon name="map-pin" size={14} /><span><strong>{demoLocationLabel(firstAffiliation.location, firstAffiliation.clinicName)}</strong>{firstAffiliation.clinicName}</span></p>}
+      </div>
+      {doctor.match && <MatchFactors factors={doctor.match.factors} />}
+      {insurance.length > 0 && <div className="directory-data-block"><strong>Insurance listed</strong><p>{insurance.join(" · ")}</p><small>Demo directory participation only</small></div>}
+      <Link className="button secondary wide" href={`/doctors/${doctor.doctorId}`}>View doctor details <Icon name="chevron-right" size={14} /></Link>
+    </article>
+  );
+}
+
+function MatchFactors({ factors }: { factors: DoctorMatchFactor[] }) {
+  const visibleFactors = factors.filter((factor) => factor.state !== "not_applicable");
+  if (visibleFactors.length === 0) return null;
+
+  return <div className="match-factor-block"><strong>Why this result matches</strong><ul>{visibleFactors.map((factor) => <li key={factor.factorCode} className={factor.state}><Icon name={factor.state === "matched" ? "check" : "info"} size={13} /><span><strong>{factorLabel(factor)}</strong><small>{factorFriendlyValue(factor)}</small></span></li>)}</ul></div>;
+}
+
+function doctorSearchError(reason: unknown, usedCursor: boolean): SearchError {
+  if (reason instanceof BeeexyApiError && reason.status === 422) {
+    const code = reason.problem?.errorCode;
+    if (usedCursor && code === "doctor_directory.cursor_invalid") return { kind: "cursor", message: "This result page can no longer be continued. Restart the same search from its first page." };
+    return { kind: "validation", message: "We couldn’t use those filters. Review your selections and try again." };
+  }
+  return { kind: "generic", message: "Check the connection and try again. No technical directory details were displayed." };
+}
+
+function initials(name: string) {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
+}
+
+function factorLabel(factor: DoctorMatchFactor) {
+  return { specialty_exact: "Specialty", language_exact: "Language", location_exact: "Location", stored_insurance_participation_exact: "Insurance" }[factor.factorCode];
+}
+
+function factorFriendlyValue(factor: DoctorMatchFactor) {
+  if (factor.state === "not_matched") return "Not matched";
+  const values = Object.fromEntries(factor.explanationData.map((item) => [item.key, item.value]));
+  const selectedValue = factor.explanationData[0]?.value;
+  if (!selectedValue) return "Matches your selection";
+
+  if (factor.factorCode === "location_exact") return demoLocationLabel(values, values.locality ?? "Matches your location");
+  const label = demoCatalogLabel(selectedValue);
+  return label === selectedValue && selectedValue.startsWith("demo-") ? "Matches your selection" : label;
 }

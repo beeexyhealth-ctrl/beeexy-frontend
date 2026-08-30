@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isGuestPreTriageRoute, isPublicRoute, postAuthDestination } from "@/features/auth/auth-route-boundary";
+import { isGuestPreTriageRoute, isPublicDirectoryRoute, isPublicRoute, postAuthDestination } from "@/features/auth/auth-route-boundary";
 
 describe("Phase 4 guest route boundary", () => {
   it("allows only guest Pre-Triage pages and keeps the claim route authenticated", () => {
@@ -13,6 +13,14 @@ describe("Phase 4 guest route boundary", () => {
   it("does not unlock authenticated application routes for guests", () => {
     for (const route of ["/home", "/settings", "/my-health", "/my-health/circle", "/appointments"]) expect(isPublicRoute(route)).toBe(false);
     expect(isPublicRoute("/pre-triage/new")).toBe(true);
+  });
+
+  it("keeps Phase 7 directory list and detail routes public without exposing booking", () => {
+    for (const route of ["/doctors", "/doctors/doctor-id", "/clinics", "/clinics/clinic-id"]) {
+      expect(isPublicDirectoryRoute(route)).toBe(true);
+      expect(isPublicRoute(route)).toBe(true);
+    }
+    expect(isPublicDirectoryRoute("/doctors/doctor-id/book")).toBe(false);
   });
 
   it("continues a pending claim after authenticated bootstrap", () => {
