@@ -1,10 +1,12 @@
-const CACHE_NAME = "beeexy-public-v2";
+const CACHE_NAME = "beeexy-public-v3";
 const PUBLIC_ASSETS = [
   "/offline.html",
-  "/icons/icon.svg",
-  "/icons/icon-192.png",
-  "/icons/icon-512.png",
-  "/icons/icon-maskable-512.png",
+  "/brand/beeexy-logo.png",
+  "/favicon.ico",
+  "/apple-touch-icon.png",
+  "/icons/icon-192x192.png",
+  "/icons/icon-512x512.png",
+  "/icons/icon-maskable-512x512.png",
 ];
 
 self.addEventListener("install", (event) => {

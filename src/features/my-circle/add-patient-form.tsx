@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/layout/app-shell";
 import { Icon } from "@/components/ui/icon";
+import { BeeexyBrand } from "@/features/entry/beeexy-brand";
 import type { RelationshipType } from "@/lib/beeexy-api/contracts";
 import { BeeexyApiError } from "@/lib/beeexy-api/problem-details";
 import { CARE_ATTESTATION, RELATIONSHIP_OPTIONS } from "./constants";
@@ -91,5 +92,5 @@ export function AddPatientForm({ initialFlow }: { initialFlow: boolean }) {
     </div>
   );
 
-  return initialFlow ? <main className="profile-gate-shell"><div className="profile-gate-top"><span className="brand-word">Beeexy<span>.</span></span></div>{content}</main> : <AppShell>{content}</AppShell>;
+  return initialFlow ? <main className="profile-gate-shell"><div className="profile-gate-top"><BeeexyBrand compact /></div>{content}</main> : <AppShell>{content}</AppShell>;
 }

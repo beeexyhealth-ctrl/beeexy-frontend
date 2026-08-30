@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Icon, type IconName } from "@/components/ui/icon";
+import { BeeexyBrand } from "@/features/entry/beeexy-brand";
 
 type HomeDashboardProps = {
   configured: boolean;
@@ -129,7 +130,7 @@ export function HomeDashboard({ configured, email, name, signedIn }: HomeDashboa
 
       <button className={`drawer-scrim ${menuOpen ? "open" : ""}`} aria-label="Close menu" tabIndex={menuOpen ? 0 : -1} onClick={() => setMenuOpen(false)} />
       <aside className={`side-drawer ${menuOpen ? "open" : ""}`} aria-label="Menu" aria-hidden={!menuOpen}>
-        <div className="drawer-top"><span className="brand-word">Beeexy<span>.</span></span><button className="icon-button" aria-label="Close menu" onClick={() => setMenuOpen(false)}><Icon name="close" size={18} /></button></div>
+        <div className="drawer-top"><BeeexyBrand compact /><button className="icon-button" aria-label="Close menu" onClick={() => setMenuOpen(false)}><Icon name="close" size={18} /></button></div>
         <Link href={signedIn ? "/my-health" : "/login"} className="drawer-user-card" onClick={() => setMenuOpen(false)}>
           <span className="avatar">{signedIn ? initial : <Icon name="user" size={19} />}</span>
           <span><strong>{signedIn ? displayName : "Welcome to Beeexy"}</strong><small>{signedIn ? email : "Sign in to unlock all features"}</small></span>

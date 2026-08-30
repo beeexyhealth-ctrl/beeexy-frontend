@@ -764,15 +764,9 @@ textarea { min-height: 112px; resize: vertical; line-height: 1.5; }
 .entry-ambient i:nth-child(1) { top: 13%; left: max(6%, calc(50% - 410px)); width: 8px; height: 8px; }
 .entry-ambient i:nth-child(2) { top: 27%; right: max(5%, calc(50% - 450px)); width: 13px; height: 13px; }
 .entry-ambient i:nth-child(3) { right: 13%; bottom: 12%; width: 6px; height: 6px; }
-.entry-brand { display: inline-flex; align-items: center; gap: 11px; width: max-content; }
-.entry-brand-mark { position: relative; display: grid; width: 39px; height: 39px; place-items: center; border-radius: 13px; color: #fff; background: var(--primary); box-shadow: 0 8px 20px rgba(67, 64, 232, .2); font: 700 17px var(--font-display); }
-.entry-brand-mark i { position: absolute; top: -3px; right: -3px; width: 12px; height: 12px; border: 2px solid #fff; border-radius: 50%; background: #aaa8ff; }
-.entry-brand-word { font-family: var(--font-display); font-size: 20px; font-weight: 700; letter-spacing: -.055em; }
-.entry-brand-word > span { color: var(--primary); }
-.entry-brand.compact { gap: 8px; }
-.entry-brand.compact .entry-brand-mark { width: 31px; height: 31px; border-radius: 10px; font-size: 13px; box-shadow: 0 5px 14px rgba(67, 64, 232, .16); }
-.entry-brand.compact .entry-brand-mark i { width: 10px; height: 10px; }
-.entry-brand.compact .entry-brand-word { font-size: 17px; }
+.entry-brand { display: inline-flex; width: 180px; max-width: 100%; align-items: center; }
+.entry-brand-image { display: block; width: 100%; height: auto; }
+.entry-brand.compact { width: 132px; }
 .entry-eyebrow { color: var(--primary); font-family: var(--font-display); font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
 .entry-icon-button { display: grid; width: 44px; height: 44px; place-items: center; border: 1px solid var(--line); border-radius: 50%; color: var(--ink); background: rgba(255, 255, 255, .84); transition: color var(--duration-fast), border-color var(--duration-fast), background var(--duration-fast), transform var(--duration-fast); }
 .entry-icon-button:hover { border-color: var(--primary-line); color: var(--primary); background: var(--primary-soft); }
@@ -938,7 +932,7 @@ textarea { min-height: 112px; resize: vertical; line-height: 1.5; }
 
 @media (max-width: 350px) {
   .onboarding-stage, .login-stage { padding-right: 15px; padding-left: 15px; }
-  .entry-brand.compact .entry-brand-word { display: none; }
+  .entry-brand.compact { width: 120px; }
   .onboarding-header { grid-template-columns: 1fr auto 1fr; }
   .onboarding-visual { width: min(50vh, 168px); }
   .onboarding-copy h1 { font-size: 27px; }
