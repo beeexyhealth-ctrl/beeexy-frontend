@@ -690,3 +690,138 @@ export interface CreateFhirExportRequest {
   sourceClinicalHistoryEventId: Uuid;
   idempotencyKey: Uuid;
 }
+
+// Phase 8 availability and appointment transport contracts.
+export type IsoInstant = string;
+export type IanaTimeZone = string;
+
+export type AppointmentStatus =
+  | "Requested"
+  | "Confirmed"
+  | "Cancelled"
+  | "Completed"
+  | "NoShow"
+  | "Rejected";
+
+export type AppointmentModality = "inPerson" | "virtual";
+
+export interface AvailabilitySlot {
+  slotId: Uuid;
+  doctorId: Uuid;
+  clinicId: Uuid;
+  locationId: Uuid;
+  startsAt: IsoInstant;
+  endsAt: IsoInstant;
+  clinicTimeZone: IanaTimeZone;
+  modality: AppointmentModality;
+}
+
+export interface RequestAppointmentRequest {
+  patientId: Uuid;
+  slotId: Uuid;
+  modality: AppointmentModality;
+  reason?: string | null;
+  idempotencyKey: Uuid;
+}
+
+export interface AppointmentSummary {
+  appointmentId: Uuid;
+  patientId: Uuid;
+  slotId: Uuid;
+  doctorId: Uuid;
+  clinicId: Uuid;
+  locationId: Uuid;
+  status: AppointmentStatus;
+  modality: AppointmentModality;
+  startsAt: IsoInstant;
+  endsAt: IsoInstant;
+  clinicTimeZone: IanaTimeZone;
+  createdAt: IsoInstant;
+}
+
+export interface RequestAppointmentResponse extends AppointmentSummary {
+  reason?: string;
+}
+
+export type AppointmentHistoryActorType =
+  | "patientAuthority"
+  | "appointmentScheduler";
+
+export type AppointmentStatusAction =
+  | "creation"
+  | "confirmation"
+  | "rejection"
+  | "cancellation"
+  | "completion"
+  | "noShow";
+
+export interface AppointmentStatusHistoryEntry {
+  sequence: number;
+  previousStatus: AppointmentStatus | null;
+  newStatus: AppointmentStatus;
+  actorType: AppointmentHistoryActorType;
+  action: AppointmentStatusAction;
+  occurredAt: IsoInstant;
+}
+
+export interface AppointmentRescheduleHistoryEntry {
+  previousSlotId: Uuid;
+  newSlotId: Uuid;
+  occurredAt: IsoInstant;
+}
+
+export interface AppointmentDetail extends AppointmentSummary {
+  reason?: string;
+  statusHistory: AppointmentStatusHistoryEntry[];
+  rescheduleHistory: AppointmentRescheduleHistoryEntry[];
+}
+
+export interface AppointmentPage {
+  items: AppointmentSummary[];
+  nextCursor: string | null;
+}
+
+export interface RescheduleAppointmentRequest {
+  slotId: Uuid;
+}
+
+export interface AvailabilityQuery {
+  from?: IsoInstant;
+  to?: IsoInstant;
+}
+
+export interface AppointmentListQuery {
+  patientId?: Uuid;
+  status?: AppointmentStatus;
+  from?: IsoInstant;
+  to?: IsoInstant;
+  cursor?: string;
+  pageSize?: number;
+}
+
+export type Phase8ErrorCode =
+  | "availability.range_invalid"
+  | "availability.filter_unsupported"
+  | "scheduling.appointment_scheduler_forbidden"
+  | "scheduling.appointment_target_not_found"
+  | "scheduling.slot_reserved"
+  | "scheduling.idempotency_key_reused"
+  | "scheduling.appointment_transition_conflict"
+  | "scheduling.appointment_reschedule_conflict"
+  | "scheduling.unsupported_field"
+  | "scheduling.identifiers_required"
+  | "scheduling.modality_invalid"
+  | "scheduling.modality_mismatch"
+  | "scheduling.reason_invalid"
+  | "scheduling.slot_expired"
+  | "scheduling.slot_unbookable"
+  | "scheduling.appointment_filter_unsupported"
+  | "scheduling.appointment_filter_invalid"
+  | "scheduling.appointment_status_invalid"
+  | "scheduling.appointment_range_invalid"
+  | "scheduling.appointment_page_size_invalid"
+  | "scheduling.appointment_cursor_invalid";
+
+export type Phase8ProblemDetails = Omit<ProblemDetails, "errorCode"> & {
+  errorCode?: Phase8ErrorCode;
+};
