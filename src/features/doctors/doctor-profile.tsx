@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { FlowFrame } from "@/components/layout/flow-frame";
 import { Icon } from "@/components/ui/icon";
+import { DoctorAvailability } from "@/features/appointments/doctor-availability";
 import { demoCatalogLabel, demoLocationLabel } from "@/features/directories/demo-presentation-catalog";
 import { DirectoryDetailTabs, DirectoryDisclaimer, DirectorySkeleton } from "@/features/directories/directory-shared";
 import type { DoctorAffiliation, DoctorDetail as DoctorDetailContract } from "@/lib/beeexy-api/contracts";
@@ -90,6 +91,7 @@ function DoctorContent({ doctor }: { doctor: DoctorDetailContract }) {
       </section>
 
       <DirectoryDisclaimer compact />
+      <DoctorAvailability doctor={doctor} />
       <DirectoryDetailTabs activeTab={activeTab} idPrefix="doctor-detail" label="Doctor detail sections" onChange={setActiveTab} tabs={DOCTOR_DETAIL_TABS} />
 
       <div className="detail-tab-panel" id={`doctor-detail-panel-${activeTab}`} role="tabpanel" aria-labelledby={`doctor-detail-tab-${activeTab}`} tabIndex={0}>

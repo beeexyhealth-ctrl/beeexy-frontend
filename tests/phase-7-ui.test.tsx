@@ -8,7 +8,19 @@ import { DoctorDirectory } from "@/features/doctors/doctor-directory";
 import { DoctorProfile } from "@/features/doctors/doctor-profile";
 import type { ClinicDetail as ClinicDetailContract, ClinicSummary, DoctorMatchFactor, DoctorSearchItem } from "@/lib/beeexy-api/contracts";
 import { beeexyPhase7Api } from "@/lib/beeexy-api/phase-7-api";
+import { beeexyPhase8Api } from "@/lib/beeexy-api/phase-8-api";
 import { BeeexyApiError, BeeexyNetworkError } from "@/lib/beeexy-api/problem-details";
+
+vi.mock("@/features/auth/auth-provider", () => ({ useAuth: () => ({ status: "unauthenticated" }) }));
+vi.mock("@/features/my-circle/patient-provider", () => ({
+  usePatients: () => ({
+    activePatient: null,
+    bootstrapStatus: "idle",
+    patients: [],
+    refreshPatients: vi.fn(),
+    selectActivePatient: vi.fn(() => false),
+  }),
+}));
 
 const amber: DoctorSearchItem = {
   doctorId: "71020000-0000-4200-8000-000000000021",
@@ -75,6 +87,7 @@ beforeEach(() => {
   vi.spyOn(beeexyPhase7Api, "getDoctor").mockResolvedValue(amber);
   vi.spyOn(beeexyPhase7Api, "listClinics").mockResolvedValue({ items: [], nextCursor: null });
   vi.spyOn(beeexyPhase7Api, "getClinic").mockResolvedValue(clinicDetail);
+  vi.spyOn(beeexyPhase8Api, "listDoctorSlots").mockResolvedValue([]);
 });
 
 afterEach(() => {
