@@ -139,3 +139,25 @@ export function formatAppointmentDateTime(
 
   return { date, time: `${startTime} – ${endTime}`, timeZone };
 }
+
+export function formatAppointmentInstant(
+  timestamp: string,
+  requestedTimeZone: string,
+  locale = "en-US",
+) {
+  const instant = new Date(timestamp);
+  let timeZone = requestedTimeZone;
+  try {
+    new Intl.DateTimeFormat(locale, { timeZone }).format(instant);
+  } catch {
+    timeZone = "UTC";
+  }
+  return {
+    label: new Intl.DateTimeFormat(locale, {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone,
+    }).format(instant),
+    timeZone,
+  };
+}

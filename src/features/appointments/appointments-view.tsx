@@ -135,28 +135,35 @@ export function AppointmentSummaryCard({ appointment }: { appointment: Appointme
 
   return (
     <article className="appointment-summary-card">
-      <div className="appointment-summary-topline">
-        <span className={`appointment-status appointment-status-${appointment.status.toLowerCase()}`}>
-          <span aria-hidden="true" />
-          {APPOINTMENT_STATUS_LABELS[appointment.status]}
-        </span>
-        <span className="appointment-modality">
-          <Icon name={modalityIcon} size={14} />
-          {APPOINTMENT_MODALITY_LABELS[appointment.modality]}
-        </span>
-      </div>
-
-      <div className="appointment-when">
-        <span className="appointment-date-icon"><Icon name="calendar" size={18} /></span>
-        <div>
-          <h2><time dateTime={appointment.startsAt}>{formatted.date}</time></h2>
-          <p>
-            <Icon name="clock" size={14} />
-            <time dateTime={appointment.startsAt}>{formatted.time}</time>
-          </p>
-          <small>{formatted.timeZone} clinic time</small>
+      <Link
+        className="appointment-summary-primary-link"
+        href={`/appointments/${encodeURIComponent(appointment.appointmentId)}`}
+        aria-label={`View appointment on ${formatted.date}`}
+      >
+        <div className="appointment-summary-topline">
+          <span className={`appointment-status appointment-status-${appointment.status.toLowerCase()}`}>
+            <span aria-hidden="true" />
+            {APPOINTMENT_STATUS_LABELS[appointment.status]}
+          </span>
+          <span className="appointment-modality">
+            <Icon name={modalityIcon} size={14} />
+            {APPOINTMENT_MODALITY_LABELS[appointment.modality]}
+          </span>
         </div>
-      </div>
+
+        <div className="appointment-when">
+          <span className="appointment-date-icon"><Icon name="calendar" size={18} /></span>
+          <div>
+            <h2><time dateTime={appointment.startsAt}>{formatted.date}</time></h2>
+            <p>
+              <Icon name="clock" size={14} />
+              <time dateTime={appointment.startsAt}>{formatted.time}</time>
+            </p>
+            <small>{formatted.timeZone} clinic time</small>
+          </div>
+          <Icon className="appointment-open-icon" name="chevron-right" size={16} />
+        </div>
+      </Link>
 
       <div className="appointment-directory-links" aria-label="Appointment care team and location">
         <Link href={`/doctors/${encodeURIComponent(appointment.doctorId)}`}>
