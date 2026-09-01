@@ -12,6 +12,10 @@ import {
   isInvalidAppointmentCursor,
   type AppointmentScope,
 } from "./appointment-list-state";
+import {
+  APPOINTMENT_LIST_REFRESH_EVENT,
+  appointmentListRefreshPatientId,
+} from "./appointment-refresh";
 
 type AppointmentListState = {
   baseQuery: AppointmentListQuery | null;
@@ -109,6 +113,15 @@ export function useAppointments(
       requestRef.current?.abort();
     };
   }, [loadFirstPage]);
+
+  useEffect(() => {
+    if (!patientId) return;
+    const refreshForPatient = (event: Event) => {
+      if (appointmentListRefreshPatientId(event) === patientId) void loadFirstPage();
+    };
+    window.addEventListener(APPOINTMENT_LIST_REFRESH_EVENT, refreshForPatient);
+    return () => window.removeEventListener(APPOINTMENT_LIST_REFRESH_EVENT, refreshForPatient);
+  }, [loadFirstPage, patientId]);
 
   const loadMore = useCallback(async () => {
     if (

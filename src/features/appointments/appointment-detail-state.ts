@@ -1,5 +1,6 @@
 import type {
   AppointmentHistoryActorType,
+  AppointmentStatus,
   AppointmentStatusAction,
 } from "@/lib/beeexy-api/contracts";
 import { BeeexyApiError, BeeexyNetworkError } from "@/lib/beeexy-api/problem-details";
@@ -17,6 +18,12 @@ export const APPOINTMENT_HISTORY_ACTOR_LABELS: Record<AppointmentHistoryActorTyp
   patientAuthority: "Patient or manager",
   appointmentScheduler: "Clinic scheduler",
 };
+
+const PATIENT_CANCELLABLE_STATUSES = new Set<AppointmentStatus>(["Requested", "Confirmed"]);
+
+export function canPatientCancelAppointment(status: AppointmentStatus) {
+  return PATIENT_CANCELLABLE_STATUSES.has(status);
+}
 
 export function isAppointmentDetailNotFound(error: unknown) {
   return error instanceof BeeexyApiError && error.status === 404;

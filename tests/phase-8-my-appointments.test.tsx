@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { isPublicRoute } from "@/features/auth/auth-route-boundary";
 import { AppointmentSummaryCard, AppointmentsView } from "@/features/appointments/appointments-view";
+import { notifyAppointmentListChanged } from "@/features/appointments/appointment-refresh";
 import type { AccessiblePatient, AppointmentStatus, AppointmentSummary } from "@/lib/beeexy-api/contracts";
 import { beeexyPhase8Api } from "@/lib/beeexy-api/phase-8-api";
 import { BeeexyApiError, BeeexyNetworkError } from "@/lib/beeexy-api/problem-details";
@@ -117,6 +118,32 @@ describe("Phase 8.3 My Appointments", () => {
     expect(query).not.toHaveProperty("status");
     expect(query).not.toHaveProperty("cursor");
     expect(signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("refetches only the affected patient list after an appointment mutation event", async () => {
+    const active = appointment("cancelled-from-detail");
+    const cancelled = { ...active, status: "Cancelled" as const };
+    vi.mocked(beeexyPhase8Api.listAppointments)
+      .mockResolvedValueOnce({ items: [active], nextCursor: null })
+      .mockResolvedValueOnce({ items: [cancelled], nextCursor: null })
+      .mockResolvedValueOnce({ items: [cancelled], nextCursor: null });
+    renderAppointments();
+    await screen.findByText("Thursday, September 10, 2099");
+
+    notifyAppointmentListChanged(managedPatient.profileId);
+    await Promise.resolve();
+    expect(beeexyPhase8Api.listAppointments).toHaveBeenCalledTimes(1);
+
+    notifyAppointmentListChanged(primaryPatient.profileId);
+    expect(await screen.findByRole("heading", { name: "No upcoming appointments" })).toBeInTheDocument();
+    expect(vi.mocked(beeexyPhase8Api.listAppointments).mock.calls[1][0]?.patientId).toBe(primaryPatient.profileId);
+
+    fireEvent.click(screen.getByRole("tab", { name: "All" }));
+    expect(await screen.findByText("Cancelled")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /view appointment/i })).toHaveAttribute(
+      "href",
+      `/appointments/${active.appointmentId}`,
+    );
   });
 
   it("uses only supported temporal filters and resets pagination when the view changes", async () => {

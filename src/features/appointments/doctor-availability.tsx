@@ -19,6 +19,10 @@ import {
   createAppointmentIdempotencyKey,
 } from "@/lib/beeexy-api/phase-8-api";
 import { BeeexyApiError, BeeexyNetworkError } from "@/lib/beeexy-api/problem-details";
+import {
+  DOCTOR_AVAILABILITY_REFRESH_EVENT,
+  doctorAvailabilityRefreshDoctorId,
+} from "./appointment-refresh";
 
 const MAX_REASON_LENGTH = 500;
 const SLOT_ERROR_CODES = new Set([
@@ -93,6 +97,14 @@ export function DoctorAvailability({ doctor }: { doctor: DoctorDetail }) {
       bookingAbortRef.current?.abort();
     };
   }, [loadAvailability]);
+
+  useEffect(() => {
+    const refreshForDoctor = (event: Event) => {
+      if (doctorAvailabilityRefreshDoctorId(event) === doctor.doctorId) void loadAvailability(false);
+    };
+    window.addEventListener(DOCTOR_AVAILABILITY_REFRESH_EVENT, refreshForDoctor);
+    return () => window.removeEventListener(DOCTOR_AVAILABILITY_REFRESH_EVENT, refreshForDoctor);
+  }, [doctor.doctorId, loadAvailability]);
 
   const slots = useMemo(() => availability.status === "ready" ? availability.slots : [], [availability]);
   const dateGroups = useMemo(() => groupSlotsByClinicDay(slots), [slots]);

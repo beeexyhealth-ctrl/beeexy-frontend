@@ -3,6 +3,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DoctorAvailability } from "@/features/appointments/doctor-availability";
+import { notifyDoctorAvailabilityChanged } from "@/features/appointments/appointment-refresh";
 import type {
   AccessiblePatient,
   AvailabilitySlot,
@@ -176,6 +177,20 @@ describe("Phase 8.2 doctor availability", () => {
     renderAvailability();
     expect(await screen.findByText("No appointment times available")).toBeInTheDocument();
     expect(screen.getByText(/currently available in this date range/i)).toBeInTheDocument();
+  });
+
+  it("refetches only matching doctor availability after an appointment mutation event", async () => {
+    renderAvailability();
+    await screen.findByRole("button", { name: /9:00 AM to 9:30 AM/i });
+    expect(beeexyPhase8Api.listDoctorSlots).toHaveBeenCalledTimes(1);
+
+    notifyDoctorAvailabilityChanged("another-doctor");
+    await Promise.resolve();
+    expect(beeexyPhase8Api.listDoctorSlots).toHaveBeenCalledTimes(1);
+
+    notifyDoctorAvailabilityChanged(doctor.doctorId);
+    await waitFor(() => expect(beeexyPhase8Api.listDoctorSlots).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(beeexyPhase8Api.listDoctorSlots).mock.calls[1][0]).toBe(doctor.doctorId);
   });
 
   it("renders a safe availability error and retries without exposing backend detail", async () => {

@@ -1554,12 +1554,45 @@ textarea { min-height: 112px; resize: vertical; line-height: 1.5; }
 .appointment-detail-state { min-height: 480px; }
 .appointment-detail-state .text-button { min-height: 44px; }
 
+/* Phase 8.5 appointment cancellation */
+.appointment-action-section { border-color: color-mix(in srgb, var(--red) 22%, var(--line)); }
+.appointment-action-heading { display: flex; align-items: center; gap: 9px; margin-bottom: 12px; }
+.appointment-action-heading > span { display: grid; width: 34px; height: 34px; flex: 0 0 34px; place-items: center; border-radius: 10px; color: var(--red); background: var(--red-soft); }
+.appointment-action-heading p { color: var(--ink-3); font-size: 7.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; }
+.appointment-action-heading h2 { margin-top: 2px; font-size: 12.5px; }
+.appointment-cancel-action { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 12px; border-radius: 12px; padding: 11px; background: var(--surface-subtle); }
+.appointment-cancel-action > div { min-width: 0; }
+.appointment-cancel-action strong { display: block; font-family: var(--font-display); font-size: 10.5px; }
+.appointment-cancel-action p { margin-top: 3px; color: var(--ink-2); font-size: 9px; line-height: 1.45; }
+.appointment-cancel-action .button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
+.appointment-cancellation-notice { display: flex; align-items: flex-start; gap: 8px; border-radius: 12px; padding: 11px; color: var(--ink-2); background: var(--surface-subtle); }
+.appointment-cancellation-notice svg { flex: 0 0 auto; margin-top: 1px; color: var(--primary); }
+.appointment-cancellation-notice.success svg { color: var(--green); }
+.appointment-cancellation-notice p { font-size: 9.5px; line-height: 1.5; }
+.appointment-cancel-backdrop { padding-bottom: max(18px, env(safe-area-inset-bottom)); }
+.appointment-cancel-dialog { width: min(100%, 430px); margin: 0 auto; }
+.appointment-cancel-dialog > dl { display: grid; margin: 14px 0 0; border-radius: 12px; padding: 2px 11px; background: var(--surface-subtle); }
+.appointment-cancel-dialog > dl > div { display: grid; grid-template-columns: minmax(0,.7fr) minmax(0,1.3fr); gap: 10px; padding: 9px 0; }
+.appointment-cancel-dialog > dl > div + div { border-top: 1px solid var(--line); }
+.appointment-cancel-dialog dt { color: var(--ink-3); font-size: 9px; }
+.appointment-cancel-dialog dd { margin: 0; overflow-wrap: anywhere; text-align: right; font-family: var(--font-display); font-size: 9.5px; font-weight: 650; }
+.appointment-cancel-dialog > .appointment-cancel-error { display: flex; grid-template-columns: none; align-items: flex-start; gap: 7px; margin-top: 12px; border-radius: 10px; padding: 10px; color: var(--red); background: var(--red-soft); }
+.appointment-cancel-error svg { flex: 0 0 auto; margin-top: 1px; }
+.appointment-cancel-dialog .appointment-cancel-error p { margin: 0; color: inherit; font-size: 9.5px; }
+.appointment-cancel-dialog > .appointment-cancel-dialog-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 18px; }
+.appointment-cancel-dialog-actions .button { min-height: 46px; }
+.appointment-cancel-dialog[aria-busy="true"] { cursor: wait; }
+
 @media (max-width: 350px) {
   .appointment-detail-metadata > div { grid-template-columns: 1fr; gap: 3px; }
   .appointment-detail-hero-status { align-items: flex-start; flex-direction: column; }
+  .appointment-cancel-action, .appointment-cancel-dialog > .appointment-cancel-dialog-actions { grid-template-columns: 1fr; }
+  .appointment-cancel-dialog > dl > div { grid-template-columns: 1fr; gap: 3px; }
+  .appointment-cancel-dialog dd { text-align: left; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .appointment-summary-primary-link, .appointment-care-links > a { transition: none; }
   .appointment-detail-skeleton > span::after { animation: none; }
+  .appointment-cancel-dialog { animation: none; }
 }
