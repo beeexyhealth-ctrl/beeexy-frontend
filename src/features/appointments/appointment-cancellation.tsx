@@ -18,6 +18,7 @@ import {
   notifyAppointmentListChanged,
   notifyDoctorAvailabilityChanged,
 } from "./appointment-refresh";
+import type { AppointmentMutationCoordinator } from "./use-appointment-mutation-coordinator";
 
 type DetailRefresh = (options?: { preserveCurrent?: boolean }) => Promise<AppointmentDetail | null>;
 
@@ -40,11 +41,13 @@ const EMPTY_CANCELLATION: CancellationState = {
 export function useAppointmentCancellation({
   appointmentId,
   applySummary,
+  coordinator,
   detail,
   refresh,
 }: {
   appointmentId: string;
   applySummary: (summary: AppointmentSummary) => void;
+  coordinator: AppointmentMutationCoordinator;
   detail: AppointmentDetail | null;
   refresh: DetailRefresh;
 }) {
@@ -61,9 +64,9 @@ export function useAppointmentCancellation({
   }, [appointmentId]);
 
   const open = useCallback(() => {
-    if (!detail || !canPatientCancelAppointment(detail.status)) return;
+    if (coordinator.activeMutation || !detail || !canPatientCancelAppointment(detail.status)) return;
     setState({ ...EMPTY_CANCELLATION, dialogOpen: true, scopeId: appointmentId });
-  }, [appointmentId, detail]);
+  }, [appointmentId, coordinator.activeMutation, detail]);
 
   const close = useCallback(() => {
     if (pendingRef.current) return;
@@ -74,6 +77,7 @@ export function useAppointmentCancellation({
 
   const cancel = useCallback(async () => {
     if (pendingRef.current || !detail || !canPatientCancelAppointment(detail.status)) return;
+    if (!coordinator.acquire("cancel")) return;
 
     const controller = new AbortController();
     const requestId = ++requestIdRef.current;
@@ -193,9 +197,10 @@ export function useAppointmentCancellation({
       if (requestId === requestIdRef.current) {
         pendingRef.current = false;
         setSubmittingScopeId("");
+        coordinator.release("cancel");
       }
     }
-  }, [appointmentId, applySummary, detail, refresh]);
+  }, [appointmentId, applySummary, coordinator, detail, refresh]);
 
   const inScope = state.scopeId === appointmentId;
   return {
@@ -205,6 +210,7 @@ export function useAppointmentCancellation({
     error: inScope ? state.error : null,
     feedback: inScope ? state.feedback : null,
     isSubmitting: submittingScopeId === appointmentId,
+    isBlocked: coordinator.activeMutation !== null && coordinator.activeMutation !== "cancel",
     notFound: inScope && state.notFound,
     open,
   };
@@ -270,7 +276,7 @@ export function AppointmentCancellationActions({
   );
 }
 
-function CancelAppointmentDialog({
+export function CancelAppointmentDialog({
   cancellation,
   detail,
 }: {

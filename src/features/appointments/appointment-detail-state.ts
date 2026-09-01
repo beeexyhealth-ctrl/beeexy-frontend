@@ -20,9 +20,14 @@ export const APPOINTMENT_HISTORY_ACTOR_LABELS: Record<AppointmentHistoryActorTyp
 };
 
 const PATIENT_CANCELLABLE_STATUSES = new Set<AppointmentStatus>(["Requested", "Confirmed"]);
+const PATIENT_RESCHEDULABLE_STATUSES = new Set<AppointmentStatus>(["Requested", "Confirmed"]);
 
 export function canPatientCancelAppointment(status: AppointmentStatus) {
   return PATIENT_CANCELLABLE_STATUSES.has(status);
+}
+
+export function canPatientRescheduleAppointment(status: AppointmentStatus) {
+  return PATIENT_RESCHEDULABLE_STATUSES.has(status);
 }
 
 export function isAppointmentDetailNotFound(error: unknown) {

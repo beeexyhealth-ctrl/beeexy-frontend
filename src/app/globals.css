@@ -1359,6 +1359,8 @@ textarea { min-height: 112px; resize: vertical; line-height: 1.5; }
 .availability-slot-grid button:hover { border-color: var(--primary-line); background: rgba(67,64,232,.025); }
 .availability-slot-grid button:active { transform: scale(.985); }
 .availability-slot-grid button.selected { border-color: var(--primary); background: var(--primary-soft); box-shadow: inset 0 0 0 1px var(--primary); }
+.availability-slot-grid button.constrained { cursor: not-allowed; opacity: .62; transform: none; }
+.availability-slot-constraint { margin-top: 5px; color: var(--ink-2); font-size: 8px; font-weight: 600; line-height: 1.35; }
 .availability-time { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; padding-right: 20px; }
 .availability-time strong { font-family: var(--font-display); font-size: 13px; font-weight: 700; }
 .availability-time small { color: var(--ink-2); font-size: 9px; }
@@ -1555,9 +1557,9 @@ textarea { min-height: 112px; resize: vertical; line-height: 1.5; }
 .appointment-detail-state .text-button { min-height: 44px; }
 
 /* Phase 8.5 appointment cancellation */
-.appointment-action-section { border-color: color-mix(in srgb, var(--red) 22%, var(--line)); }
+.appointment-action-section { border-color: var(--primary-line); }
 .appointment-action-heading { display: flex; align-items: center; gap: 9px; margin-bottom: 12px; }
-.appointment-action-heading > span { display: grid; width: 34px; height: 34px; flex: 0 0 34px; place-items: center; border-radius: 10px; color: var(--red); background: var(--red-soft); }
+.appointment-action-heading > span { display: grid; width: 34px; height: 34px; flex: 0 0 34px; place-items: center; border-radius: 10px; color: var(--primary); background: var(--primary-soft); }
 .appointment-action-heading p { color: var(--ink-3); font-size: 7.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; }
 .appointment-action-heading h2 { margin-top: 2px; font-size: 12.5px; }
 .appointment-cancel-action { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 12px; border-radius: 12px; padding: 11px; background: var(--surface-subtle); }
@@ -1583,16 +1585,78 @@ textarea { min-height: 112px; resize: vertical; line-height: 1.5; }
 .appointment-cancel-dialog-actions .button { min-height: 46px; }
 .appointment-cancel-dialog[aria-busy="true"] { cursor: wait; }
 
+/* Phase 8.6 transactional appointment rescheduling */
+.appointment-patient-action-list { display: grid; gap: 8px; }
+.appointment-patient-action { display: grid; min-width: 0; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 10px; border-radius: 12px; padding: 11px; background: var(--surface-subtle); }
+.appointment-patient-action > span { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 10px; color: var(--primary); background: #fff; }
+.appointment-patient-action.cancel > span { color: var(--red); background: var(--red-soft); }
+.appointment-patient-action > div { min-width: 0; }
+.appointment-patient-action strong { display: block; font-family: var(--font-display); font-size: 10.5px; }
+.appointment-patient-action p { margin-top: 3px; color: var(--ink-2); font-size: 9px; line-height: 1.45; }
+.appointment-patient-action .button { min-height: 44px; white-space: nowrap; }
+.appointment-cancellation-notice + .appointment-cancellation-notice, .appointment-cancellation-notice + .appointment-patient-action-list { margin-top: 8px; }
+.appointment-reschedule-backdrop { padding: 12px; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+.appointment-reschedule-dialog { width: min(100%, 640px); max-height: calc(100dvh - 24px); overflow-y: auto; overscroll-behavior: contain; margin: 0 auto; padding: 0; scrollbar-width: thin; }
+.reschedule-dialog-header { position: sticky; z-index: 2; top: 0; display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 10px; border-bottom: 1px solid var(--line); padding: 15px; background: rgba(255,255,255,.97); backdrop-filter: blur(14px); }
+.reschedule-dialog-header > span { display: grid; width: 40px; height: 40px; place-items: center; border-radius: 12px; color: var(--primary); background: var(--primary-soft); }
+.reschedule-dialog-header p, .reschedule-picker-heading p, .reschedule-review-heading p, .reschedule-current > div > p { color: var(--primary); font-family: var(--font-display); font-size: 8px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.reschedule-dialog-header h2 { margin-top: 2px; font-size: 16px; }
+.reschedule-dialog-header .icon-button { width: 44px; height: 44px; }
+.reschedule-dialog-description { margin: 0; padding: 12px 15px 0; color: var(--ink-2); font-size: 10px; line-height: 1.5; }
+.reschedule-current, .reschedule-picker, .reschedule-review { margin: 12px 15px 0; border: 1px solid var(--line); border-radius: 14px; padding: 13px; }
+.reschedule-current { background: var(--surface-subtle); }
+.reschedule-current h3, .reschedule-picker-heading h3, .reschedule-review-heading h3 { margin-top: 3px; font-size: 13px; }
+.reschedule-current dl { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin-top: 11px; }
+.reschedule-current dl > div { min-width: 0; border-radius: 9px; padding: 8px; background: #fff; }
+.reschedule-current dt { color: var(--ink-3); font-size: 8px; }
+.reschedule-current dd { margin: 3px 0 0; overflow-wrap: anywhere; font-family: var(--font-display); font-size: 9px; font-weight: 650; line-height: 1.4; }
+.reschedule-picker { border-color: var(--primary-line); }
+.reschedule-picker-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.reschedule-picker-heading small { max-width: 180px; color: var(--ink-3); text-align: right; font-size: 8px; line-height: 1.4; }
+.reschedule-doctor-field { display: grid; gap: 5px; margin-top: 13px; }
+.reschedule-doctor-field > span { font-family: var(--font-display); font-size: 9.5px; font-weight: 650; }
+.reschedule-doctor-field select { min-height: 46px; border: 1px solid var(--line-strong); border-radius: 10px; padding: 8px 10px; background: #fff; font-size: 16px; }
+.appointment-reschedule-error { display: flex; align-items: flex-start; gap: 7px; margin-top: 12px; border-radius: 10px; padding: 10px; color: var(--red); background: var(--red-soft); }
+.appointment-reschedule-error svg { flex: 0 0 auto; margin-top: 1px; }
+.appointment-reschedule-error p { margin: 0; color: inherit; font-size: 9.5px; line-height: 1.45; }
+.reschedule-review { margin-bottom: 15px; border-color: var(--primary-line); }
+.reschedule-comparison { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); align-items: stretch; gap: 9px; margin-top: 11px; }
+.reschedule-comparison > article { min-width: 0; border-radius: 11px; padding: 10px; background: var(--surface-subtle); }
+.reschedule-comparison > article:last-child { color: var(--primary); background: var(--primary-soft); }
+.reschedule-comparison > span { align-self: center; color: var(--primary); }
+.reschedule-comparison article > span { color: var(--ink-3); font-size: 7.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+.reschedule-comparison h4 { margin-top: 5px; font-size: 10.5px; line-height: 1.4; }
+.reschedule-comparison p { margin-top: 4px; color: var(--ink-2); font-size: 9px; }
+.reschedule-comparison small { display: block; margin-top: 4px; color: var(--ink-3); font-size: 8px; line-height: 1.4; overflow-wrap: anywhere; }
+.reschedule-transaction-note { display: flex; align-items: flex-start; gap: 6px; margin-top: 10px; color: var(--ink-2); font-size: 8.5px; line-height: 1.45; }
+.reschedule-transaction-note svg { flex: 0 0 auto; color: var(--primary); }
+.reschedule-review-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+.reschedule-review-actions .button { min-height: 46px; }
+.appointment-reschedule-dialog[aria-busy="true"] { cursor: wait; }
+
+@media (max-width: 480px) {
+  .appointment-reschedule-dialog .availability-slot-grid { grid-template-columns: 1fr; }
+  .appointment-reschedule-dialog .availability-slot-grid button { min-height: 112px; }
+  .reschedule-comparison { grid-template-columns: 1fr; }
+  .reschedule-comparison > span { justify-self: center; transform: rotate(90deg); }
+}
+
 @media (max-width: 350px) {
   .appointment-detail-metadata > div { grid-template-columns: 1fr; gap: 3px; }
   .appointment-detail-hero-status { align-items: flex-start; flex-direction: column; }
   .appointment-cancel-action, .appointment-cancel-dialog > .appointment-cancel-dialog-actions { grid-template-columns: 1fr; }
   .appointment-cancel-dialog > dl > div { grid-template-columns: 1fr; gap: 3px; }
   .appointment-cancel-dialog dd { text-align: left; }
+  .appointment-patient-action { grid-template-columns: auto minmax(0,1fr); }
+  .appointment-patient-action .button { grid-column: 1 / -1; width: 100%; }
+  .reschedule-current dl, .reschedule-review-actions { grid-template-columns: 1fr; }
+  .reschedule-picker-heading { align-items: flex-start; flex-direction: column; gap: 4px; }
+  .reschedule-picker-heading small { max-width: none; text-align: left; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .appointment-summary-primary-link, .appointment-care-links > a { transition: none; }
   .appointment-detail-skeleton > span::after { animation: none; }
   .appointment-cancel-dialog { animation: none; }
+  .appointment-reschedule-dialog { animation: none; }
 }

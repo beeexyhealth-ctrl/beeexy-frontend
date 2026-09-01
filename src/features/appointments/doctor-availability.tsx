@@ -322,11 +322,11 @@ export function DoctorAvailability({ doctor }: { doctor: DoctorDetail }) {
   );
 }
 
-type DateGroup = { key: string; representative: AvailabilitySlot; slots: AvailabilitySlot[] };
+export type AvailabilityDateGroup = { key: string; representative: AvailabilitySlot; slots: AvailabilitySlot[] };
 
-function AvailabilityDateSelector({ activeDay, groups, onChange }: {
+export function AvailabilityDateSelector({ activeDay, groups, onChange }: {
   activeDay: string;
-  groups: DateGroup[];
+  groups: AvailabilityDateGroup[];
   onChange: (day: string) => void;
 }) {
   return (
@@ -348,7 +348,8 @@ function AvailabilityDateSelector({ activeDay, groups, onChange }: {
   );
 }
 
-function AvailabilitySlotList({ doctor, onSelect, selectedSlotId, slots }: {
+export function AvailabilitySlotList({ constraintForSlot, doctor, onSelect, selectedSlotId, slots }: {
+  constraintForSlot?: (slot: AvailabilitySlot) => string | null;
   doctor: DoctorDetail;
   onSelect: (slotId: string) => void;
   selectedSlotId: string | null;
@@ -366,11 +367,13 @@ function AvailabilitySlotList({ doctor, onSelect, selectedSlotId, slots }: {
         {slots.map((slot) => {
           const location = resolveSlotLocation(doctor, slot);
           const selected = selectedSlotId === slot.slotId;
+          const constraint = constraintForSlot?.(slot) ?? null;
           return (
             <button
-              aria-label={`${formatTimeRange(slot)}, ${modalityLabel(slot.modality)}, ${location.clinicName}${location.locationName ? `, ${location.locationName}` : ""}, clinic time ${slot.clinicTimeZone}`}
+              aria-label={`${formatTimeRange(slot)}, ${modalityLabel(slot.modality)}, ${location.clinicName}${location.locationName ? `, ${location.locationName}` : ""}, clinic time ${slot.clinicTimeZone}${constraint ? `, ${constraint}` : ""}`}
               aria-pressed={selected}
-              className={selected ? "selected" : ""}
+              className={`${selected ? "selected" : ""}${constraint ? " constrained" : ""}`}
+              disabled={Boolean(constraint)}
               key={slot.slotId}
               onClick={() => onSelect(slot.slotId)}
               type="button"
@@ -379,6 +382,7 @@ function AvailabilitySlotList({ doctor, onSelect, selectedSlotId, slots }: {
               <span className="availability-modality"><Icon name={slot.modality === "virtual" ? "video" : "map-pin"} size={13} />{modalityLabel(slot.modality)}</span>
               <span className="availability-clinic">{location.clinicName}</span>
               <span className="availability-zone">Clinic time · {slot.clinicTimeZone}</span>
+              {constraint && <span className="availability-slot-constraint">{constraint}</span>}
               {selected && <span className="availability-check" aria-hidden="true"><Icon name="check" size={12} /></span>}
             </button>
           );
@@ -525,7 +529,7 @@ function AppointmentRequestSuccess({ doctor, onReset, success }: {
   );
 }
 
-function AvailabilitySkeleton() {
+export function AvailabilitySkeleton() {
   return (
     <div className="availability-skeleton" role="status" aria-label="Loading appointment availability">
       <span className="sr-only">Loading appointment availability…</span>
@@ -535,7 +539,7 @@ function AvailabilitySkeleton() {
   );
 }
 
-function AvailabilityStateView({ action, message, title }: { action?: () => void; message: string; title: string }) {
+export function AvailabilityStateView({ action, message, title }: { action?: () => void; message: string; title: string }) {
   return (
     <div className="availability-state">
       <span aria-hidden="true"><Icon name="calendar" size={20} /></span>
@@ -546,8 +550,8 @@ function AvailabilityStateView({ action, message, title }: { action?: () => void
   );
 }
 
-function groupSlotsByClinicDay(slots: AvailabilitySlot[]): DateGroup[] {
-  const groups = new Map<string, DateGroup>();
+export function groupSlotsByClinicDay(slots: AvailabilitySlot[]): AvailabilityDateGroup[] {
+  const groups = new Map<string, AvailabilityDateGroup>();
   for (const slot of slots) {
     const key = clinicDayKey(slot);
     const group = groups.get(key);
@@ -577,7 +581,7 @@ function formatDatePart(slot: AvailabilitySlot, part: "day" | "month" | "weekday
   }).format(new Date(slot.startsAt));
 }
 
-function formatLongDate(slot: Pick<AvailabilitySlot, "startsAt" | "clinicTimeZone">) {
+export function formatLongDate(slot: Pick<AvailabilitySlot, "startsAt" | "clinicTimeZone">) {
   return new Intl.DateTimeFormat("en-US", {
     day: "numeric",
     month: "long",
@@ -598,15 +602,15 @@ function formatTime(value: string, timeZone: string) {
   return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone }).format(new Date(value));
 }
 
-function formatTimeRange(slot: Pick<AvailabilitySlot, "startsAt" | "endsAt" | "clinicTimeZone">) {
+export function formatTimeRange(slot: Pick<AvailabilitySlot, "startsAt" | "endsAt" | "clinicTimeZone">) {
   return `${formatStartTime(slot)} to ${formatEndTime(slot)}`;
 }
 
-function formatFullSlot(slot: Pick<AvailabilitySlot, "startsAt" | "endsAt" | "clinicTimeZone">) {
+export function formatFullSlot(slot: Pick<AvailabilitySlot, "startsAt" | "endsAt" | "clinicTimeZone">) {
   return `${formatLongDate(slot)} · ${formatTimeRange(slot)} · ${slot.clinicTimeZone}`;
 }
 
-function modalityLabel(modality: AppointmentModality) {
+export function modalityLabel(modality: AppointmentModality) {
   return modality === "virtual" ? "Virtual" : "In person";
 }
 
@@ -615,7 +619,7 @@ function patientOptionLabel(patient: AccessiblePatient) {
   return `${displayPatientName(patient)} — ${patient.accessType === "Primary" ? "You" : relationship}`;
 }
 
-function resolveSlotLocation(
+export function resolveSlotLocation(
   doctor: DoctorDetail,
   slot: Pick<AvailabilitySlot, "clinicId" | "locationId">,
 ) {

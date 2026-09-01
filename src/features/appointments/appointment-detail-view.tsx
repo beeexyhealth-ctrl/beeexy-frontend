@@ -22,23 +22,34 @@ import {
   formatAppointmentInstant,
 } from "./appointment-list-state";
 import {
-  AppointmentCancellationActions,
   useAppointmentCancellation,
 } from "./appointment-cancellation";
+import { AppointmentPatientActions } from "./appointment-actions";
+import { useAppointmentRescheduling } from "./appointment-rescheduling";
+import { useAppointmentMutationCoordinator } from "./use-appointment-mutation-coordinator";
 import { useAppointmentDetail } from "./use-appointment-detail";
 
 export function AppointmentDetailView({ appointmentId }: { appointmentId: string }) {
   const appointment = useAppointmentDetail(appointmentId);
   const { patients } = usePatients();
+  const mutationCoordinator = useAppointmentMutationCoordinator(appointmentId);
   const cancellation = useAppointmentCancellation({
     appointmentId,
     applySummary: appointment.applySummary,
+    coordinator: mutationCoordinator,
+    detail: appointment.detail,
+    refresh: appointment.refresh,
+  });
+  const rescheduling = useAppointmentRescheduling({
+    appointmentId,
+    applySummary: appointment.applySummary,
+    coordinator: mutationCoordinator,
     detail: appointment.detail,
     refresh: appointment.refresh,
   });
 
   if (appointment.isLoading) return <AppointmentDetailShell><AppointmentDetailSkeleton /></AppointmentDetailShell>;
-  if (cancellation.notFound || isAppointmentDetailNotFound(appointment.error)) {
+  if (cancellation.notFound || rescheduling.notFound || isAppointmentDetailNotFound(appointment.error)) {
     return <AppointmentDetailShell><AppointmentNotFound /></AppointmentDetailShell>;
   }
   if (appointment.error || !appointment.detail) {
@@ -53,7 +64,12 @@ export function AppointmentDetailView({ appointmentId }: { appointmentId: string
   const patientName = patient ? displayPatientName(patient) : "Authorized patient profile";
   return (
     <AppointmentDetailShell>
-      <AppointmentDetailContent cancellation={cancellation} detail={appointment.detail} patientName={patientName} />
+      <AppointmentDetailContent
+        cancellation={cancellation}
+        detail={appointment.detail}
+        patientName={patientName}
+        rescheduling={rescheduling}
+      />
     </AppointmentDetailShell>
   );
 }
@@ -75,10 +91,11 @@ function AppointmentDetailShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function AppointmentDetailContent({ cancellation, detail, patientName }: {
+function AppointmentDetailContent({ cancellation, detail, patientName, rescheduling }: {
   cancellation: ReturnType<typeof useAppointmentCancellation>;
   detail: AppointmentDetail;
   patientName: string;
+  rescheduling: ReturnType<typeof useAppointmentRescheduling>;
 }) {
   const scheduled = formatAppointmentDateTime(detail);
   return (
@@ -112,7 +129,7 @@ function AppointmentDetailContent({ cancellation, detail, patientName }: {
         </section>
       )}
 
-      <AppointmentCancellationActions cancellation={cancellation} detail={detail} />
+      <AppointmentPatientActions cancellation={cancellation} detail={detail} rescheduling={rescheduling} />
 
       <AppointmentStatusTimeline detail={detail} />
       <AppointmentRescheduleHistory detail={detail} />
