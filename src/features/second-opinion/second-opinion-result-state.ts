@@ -19,6 +19,14 @@ export type SecondOpinionLoadError = {
   message: string;
 };
 
+export type SecondOpinionRegenerationError = {
+  blockRegeneration: boolean;
+  canCheckStatus: boolean;
+  clearExisting: boolean;
+  kind: "session" | "unavailable" | "conflict" | "immutable-input" | "request-invalid" | "ambiguous" | "server";
+  message: string;
+};
+
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
@@ -95,6 +103,82 @@ export function secondOpinionLoadError(error: unknown): SecondOpinionLoadError {
     clearExisting: false,
     kind: "server",
     message: "We couldn’t load this Second Opinion right now.",
+  };
+}
+
+export function canRegenerateSecondOpinion(display: SecondOpinionDisplayState) {
+  return display.kind === "succeeded" || display.kind === "failed" || display.kind === "rejected";
+}
+
+export function secondOpinionRegenerationError(error: unknown): SecondOpinionRegenerationError {
+  const errorCode = error instanceof BeeexyApiError ? error.problem?.errorCode : undefined;
+
+  if (error instanceof BeeexyApiError && error.status === 401) {
+    return {
+      blockRegeneration: true,
+      canCheckStatus: false,
+      clearExisting: true,
+      kind: "session",
+      message: "Your session has ended. Sign in again to view this Second Opinion.",
+    };
+  }
+  if (error instanceof BeeexyApiError && error.status === 404) {
+    return {
+      blockRegeneration: true,
+      canCheckStatus: false,
+      clearExisting: true,
+      kind: "unavailable",
+      message: "This Second Opinion is unavailable.",
+    };
+  }
+  if (error instanceof BeeexyApiError
+    && error.status === 409
+    && errorCode === "ai.second_opinion.execution_conflict") {
+    return {
+      blockRegeneration: true,
+      canCheckStatus: true,
+      clearExisting: false,
+      kind: "conflict",
+      message: "A regeneration is already in progress. Check the current status before trying again.",
+    };
+  }
+  if (error instanceof BeeexyApiError
+    && error.status === 422
+    && errorCode === "ai.second_opinion.immutable_input_invalid") {
+    return {
+      blockRegeneration: true,
+      canCheckStatus: false,
+      clearExisting: false,
+      kind: "immutable-input",
+      message: "Beeexy can’t regenerate this Second Opinion from its original information.",
+    };
+  }
+  if (error instanceof BeeexyApiError
+    && error.status === 422
+    && errorCode === "ai.second_opinion.regeneration_body_not_allowed") {
+    return {
+      blockRegeneration: true,
+      canCheckStatus: false,
+      clearExisting: false,
+      kind: "request-invalid",
+      message: "Beeexy couldn't accept this regeneration request.",
+    };
+  }
+  if (error instanceof BeeexyNetworkError) {
+    return {
+      blockRegeneration: true,
+      canCheckStatus: true,
+      clearExisting: false,
+      kind: "ambiguous",
+      message: "We couldn’t confirm whether regeneration started. Check the current status before trying again.",
+    };
+  }
+  return {
+    blockRegeneration: error instanceof BeeexyApiError && error.status >= 500,
+    canCheckStatus: error instanceof BeeexyApiError && error.status >= 500,
+    clearExisting: false,
+    kind: "server",
+    message: "Beeexy couldn’t regenerate this Second Opinion right now.",
   };
 }
 

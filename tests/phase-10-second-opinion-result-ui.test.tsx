@@ -424,17 +424,16 @@ describe("Phase 10.5 privacy and scope boundaries", () => {
     expect(beeexyPhase10Api.getAiConversation).not.toHaveBeenCalled();
   });
 
-  it("contains no polling, browser persistence, provider call, Clinical History promotion, or regeneration UI", async () => {
+  it("contains no polling, browser persistence, provider call, or Clinical History promotion", async () => {
     const source = readFileSync(
       resolve(process.cwd(), "src/features/second-opinion/second-opinion-result.tsx"),
       "utf8",
     );
     expect(source).not.toMatch(/setInterval|localStorage|sessionStorage|indexedDB/i);
-    expect(source).not.toMatch(/regenerateSecondOpinion|uploadAiDocument|usePreTriage|useClinicalHistory/i);
+    expect(source).not.toMatch(/uploadAiDocument|usePreTriage|useClinicalHistory/i);
     expect(source).not.toMatch(/provider\.com|Save to Clinical History|FHIR/i);
 
     await renderLoaded();
-    expect(screen.queryByRole("button", { name: /regenerate/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /save to clinical history|FHIR/i })).not.toBeInTheDocument();
     expect(beeexyPhase10Api.regenerateSecondOpinion).not.toHaveBeenCalled();
   });

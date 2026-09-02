@@ -1,18 +1,29 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import { Icon } from "@/components/ui/icon";
 import type {
   SecondOpinion,
+  SecondOpinionAccepted,
   SecondOpinionMetadata,
   SecondOpinionResult,
+  SecondOpinionTerminalStatus,
 } from "@/lib/beeexy-api/contracts";
 import { beeexyPhase10Api } from "@/lib/beeexy-api/phase-10-api";
 import {
+  canRegenerateSecondOpinion,
   formatSecondOpinionResultDate,
   secondOpinionDisplayState,
   secondOpinionLoadError,
+  secondOpinionRegenerationError,
   type SecondOpinionLoadError,
 } from "./second-opinion-result-state";
 
@@ -30,14 +41,78 @@ type ResultLoadState =
 type LoadOptions = {
   focusAfter?: boolean;
   preserve?: boolean;
+  preserveSuccessfulOnNonSuccess?: boolean;
   replaceActive?: boolean;
+  suppressRefreshError?: boolean;
 };
+
+type ResultLoadOutcome =
+  | {
+    kind: "loaded";
+    opinion: SecondOpinion;
+    preservedOpinion: SecondOpinion | null;
+    preservedSuccessfulResult: boolean;
+  }
+  | { error: SecondOpinionLoadError; kind: "error"; preservedOpinion: SecondOpinion | null }
+  | { kind: "ignored" };
+
+type RegenerationNotice = {
+  blockRegeneration: boolean;
+  canCheckStatus: boolean;
+  message: string;
+  tone: "success" | "progress" | "warning" | "error";
+};
+
+type RegenerationState =
+  | { kind: "idle"; scopeId: string }
+  | { kind: "confirming"; scopeId: string }
+  | { kind: "submitting"; scopeId: string }
+  | { kind: "reconciling"; scopeId: string }
+  | { kind: "notice"; notice: RegenerationNotice; scopeId: string };
+
+function isTerminalReceipt(receipt: SecondOpinionAccepted, analysisId: string) {
+  const terminalStatuses: SecondOpinionTerminalStatus[] = ["succeeded", "failed", "rejected"];
+  return receipt.analysisId === analysisId
+    && typeof receipt.executionId === "string"
+    && receipt.executionId.length > 0
+    && typeof receipt.statusUrl === "string"
+    && receipt.statusUrl.length > 0
+    && terminalStatuses.includes(receipt.status);
+}
+
+function isNewSuccessfulSnapshot(previous: SecondOpinion | null, next: SecondOpinion) {
+  if (secondOpinionDisplayState(next).kind !== "succeeded") return false;
+  if (!previous || secondOpinionDisplayState(previous).kind !== "succeeded") return true;
+  if (next.executionId && previous.executionId) return next.executionId !== previous.executionId;
+  return next.metadata?.generatedAt !== previous.metadata?.generatedAt
+    || next.metadata?.resultVersion !== previous.metadata?.resultVersion;
+}
+
+function terminalAttemptNotice(status: Exclude<SecondOpinionTerminalStatus, "succeeded">): RegenerationNotice {
+  return status === "rejected"
+    ? {
+      blockRegeneration: false,
+      canCheckStatus: false,
+      message: "The regeneration request was declined safely. Any previous result remains available.",
+      tone: "warning",
+    }
+    : {
+      blockRegeneration: false,
+      canCheckStatus: false,
+      message: "Beeexy couldn't complete the regeneration. Any previous result remains available.",
+      tone: "error",
+    };
+}
 
 export function SecondOpinionResultView({ analysisId }: { analysisId: string }) {
   const [state, setState] = useState<ResultLoadState>({ kind: "loading", scopeId: analysisId });
+  const [regeneration, setRegeneration] = useState<RegenerationState>({ kind: "idle", scopeId: analysisId });
   const stateRef = useRef<ResultLoadState>(state);
   const controllerRef = useRef<AbortController | null>(null);
+  const regenerationControllerRef = useRef<AbortController | null>(null);
   const requestIdRef = useRef(0);
+  const regenerationRequestIdRef = useRef(0);
+  const regeneratingRef = useRef(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
   const commit = useCallback((next: ResultLoadState) => {
@@ -48,9 +123,11 @@ export function SecondOpinionResultView({ analysisId }: { analysisId: string }) 
   const load = useCallback(async ({
     focusAfter = false,
     preserve = false,
+    preserveSuccessfulOnNonSuccess = false,
     replaceActive = false,
+    suppressRefreshError = false,
   }: LoadOptions = {}) => {
-    if (controllerRef.current && !replaceActive) return;
+    if (controllerRef.current && !replaceActive) return { kind: "ignored" } as ResultLoadOutcome;
     if (replaceActive) controllerRef.current?.abort();
 
     const current = stateRef.current;
@@ -62,7 +139,9 @@ export function SecondOpinionResultView({ analysisId }: { analysisId: string }) 
     controllerRef.current = controller;
 
     await Promise.resolve();
-    if (controller.signal.aborted || requestId !== requestIdRef.current) return;
+    if (controller.signal.aborted || requestId !== requestIdRef.current) {
+      return { kind: "ignored" } as ResultLoadOutcome;
+    }
 
     commit(preservedOpinion
       ? {
@@ -76,30 +155,47 @@ export function SecondOpinionResultView({ analysisId }: { analysisId: string }) 
 
     try {
       const response = await beeexyPhase10Api.getSecondOpinion(analysisId, controller.signal);
-      if (controller.signal.aborted || requestId !== requestIdRef.current) return;
+      if (controller.signal.aborted || requestId !== requestIdRef.current) {
+        return { kind: "ignored" } as ResultLoadOutcome;
+      }
+      const preservedSuccessfulResult = Boolean(
+        preserveSuccessfulOnNonSuccess
+        && preservedOpinion
+        && secondOpinionDisplayState(preservedOpinion).kind === "succeeded"
+        && secondOpinionDisplayState(response).kind !== "succeeded",
+      );
       commit({
         kind: "ready",
-        opinion: response,
+        opinion: preservedSuccessfulResult && preservedOpinion ? preservedOpinion : response,
         refreshError: null,
         refreshing: false,
         scopeId: analysisId,
       });
+      return {
+        kind: "loaded",
+        opinion: response,
+        preservedOpinion,
+        preservedSuccessfulResult,
+      } as ResultLoadOutcome;
     } catch (caught) {
       if (controller.signal.aborted || requestId !== requestIdRef.current
-        || (caught instanceof Error && caught.name === "AbortError")) return;
+        || (caught instanceof Error && caught.name === "AbortError")) {
+        return { kind: "ignored" } as ResultLoadOutcome;
+      }
 
       const mapped = secondOpinionLoadError(caught);
       if (preservedOpinion && !mapped.clearExisting) {
         commit({
           kind: "ready",
           opinion: preservedOpinion,
-          refreshError: mapped,
+          refreshError: suppressRefreshError ? null : mapped,
           refreshing: false,
           scopeId: analysisId,
         });
       } else {
         commit({ error: mapped, kind: "error", scopeId: analysisId });
       }
+      return { error: mapped, kind: "error", preservedOpinion } as ResultLoadOutcome;
     } finally {
       if (controllerRef.current === controller) controllerRef.current = null;
       if (focusAfter && !controller.signal.aborted && requestId === requestIdRef.current) {
@@ -123,6 +219,10 @@ export function SecondOpinionResultView({ analysisId }: { analysisId: string }) 
       requestIdRef.current += 1;
       controllerRef.current?.abort();
       controllerRef.current = null;
+      regenerationRequestIdRef.current += 1;
+      regenerationControllerRef.current?.abort();
+      regenerationControllerRef.current = null;
+      regeneratingRef.current = false;
     };
   }, [analysisId, load]);
 
@@ -132,6 +232,183 @@ export function SecondOpinionResultView({ analysisId }: { analysisId: string }) 
   const display = scopedState.kind === "ready"
     ? secondOpinionDisplayState(scopedState.opinion)
     : null;
+  const scopedRegeneration: RegenerationState = regeneration.scopeId === analysisId
+    ? regeneration
+    : { kind: "idle", scopeId: analysisId };
+  const regenerationActive = scopedRegeneration.kind === "submitting"
+    || scopedRegeneration.kind === "reconciling";
+  const regenerationNotice = scopedRegeneration.kind === "notice" ? scopedRegeneration.notice : null;
+  const regenerationEligible = display ? canRegenerateSecondOpinion(display) : false;
+
+  const focusContent = useCallback(() => {
+    queueMicrotask(() => contentRef.current?.focus());
+  }, []);
+
+  const setNotice = useCallback((notice: RegenerationNotice) => {
+    setRegeneration({ kind: "notice", notice, scopeId: analysisId });
+    focusContent();
+  }, [analysisId, focusContent]);
+
+  const noticeForLoadedStatus = useCallback((
+    outcome: Extract<ResultLoadOutcome, { kind: "loaded" }>,
+    previousOpinion: SecondOpinion | null,
+    receipt?: SecondOpinionAccepted,
+  ) => {
+    const loadedDisplay = secondOpinionDisplayState(outcome.opinion);
+    if (receipt?.status === "failed" || receipt?.status === "rejected") {
+      setNotice(terminalAttemptNotice(receipt.status));
+      return;
+    }
+    if (loadedDisplay.kind === "pending" || loadedDisplay.kind === "running") {
+      setNotice({
+        blockRegeneration: true,
+        canCheckStatus: true,
+        message: "Regeneration is still in progress. Check the status when you're ready.",
+        tone: "progress",
+      });
+      return;
+    }
+    if (loadedDisplay.kind === "failed" || loadedDisplay.kind === "rejected") {
+      setNotice(terminalAttemptNotice(loadedDisplay.kind));
+      return;
+    }
+    if (loadedDisplay.kind === "succeeded") {
+      const matchesReceipt = !receipt
+        || !outcome.opinion.executionId
+        || outcome.opinion.executionId === receipt.executionId;
+      if (matchesReceipt && isNewSuccessfulSnapshot(previousOpinion, outcome.opinion)) {
+        setNotice({
+          blockRegeneration: false,
+          canCheckStatus: false,
+          message: "A new Second Opinion result is ready.",
+          tone: "success",
+        });
+      } else {
+        setNotice({
+          blockRegeneration: false,
+          canCheckStatus: true,
+          message: "No newer result is available yet. You can check the status or regenerate later.",
+          tone: "progress",
+        });
+      }
+      return;
+    }
+    setNotice({
+      blockRegeneration: true,
+      canCheckStatus: true,
+      message: "Beeexy returned a status that can't be displayed safely. Check the status before trying again.",
+      tone: "warning",
+    });
+  }, [setNotice]);
+
+  const checkRegenerationStatus = useCallback(async () => {
+    if (regeneratingRef.current || controllerRef.current) return;
+    const current = stateRef.current;
+    const previousOpinion = current.kind === "ready" && current.scopeId === analysisId
+      ? current.opinion
+      : null;
+    const outcome = await load({
+      focusAfter: true,
+      preserve: true,
+      preserveSuccessfulOnNonSuccess: true,
+      suppressRefreshError: true,
+    });
+    if (outcome.kind === "loaded") {
+      noticeForLoadedStatus(outcome, previousOpinion);
+    } else if (outcome.kind === "error" && !outcome.error.clearExisting) {
+      setNotice({
+        blockRegeneration: true,
+        canCheckStatus: true,
+        message: "Beeexy couldn't confirm the latest status. Your previous result remains available.",
+        tone: "warning",
+      });
+    } else if (outcome.kind === "error") {
+      setRegeneration({ kind: "idle", scopeId: analysisId });
+    }
+  }, [analysisId, load, noticeForLoadedStatus, setNotice]);
+
+  const regenerate = useCallback(async () => {
+    const current = stateRef.current;
+    if (regeneratingRef.current
+      || current.kind !== "ready"
+      || current.scopeId !== analysisId
+      || !canRegenerateSecondOpinion(secondOpinionDisplayState(current.opinion))) return;
+
+    regeneratingRef.current = true;
+    const previousOpinion = current.opinion;
+    const controller = new AbortController();
+    const requestId = ++regenerationRequestIdRef.current;
+    regenerationControllerRef.current = controller;
+    setRegeneration({ kind: "submitting", scopeId: analysisId });
+
+    try {
+      const receipt = await beeexyPhase10Api.regenerateSecondOpinion(analysisId, controller.signal);
+      if (controller.signal.aborted || requestId !== regenerationRequestIdRef.current) return;
+      const receiptIsValid = isTerminalReceipt(receipt, analysisId);
+
+      setRegeneration({ kind: "reconciling", scopeId: analysisId });
+      const outcome = await load({
+        preserve: true,
+        preserveSuccessfulOnNonSuccess: true,
+        replaceActive: true,
+        suppressRefreshError: true,
+      });
+      if (controller.signal.aborted || requestId !== regenerationRequestIdRef.current) return;
+      if (!receiptIsValid) {
+        setNotice({
+          blockRegeneration: true,
+          canCheckStatus: true,
+          message: "Beeexy returned an unexpected regeneration receipt. Check the current status before trying again.",
+          tone: "warning",
+        });
+        return;
+      }
+      if (outcome.kind === "loaded") {
+        noticeForLoadedStatus(outcome, previousOpinion, receipt);
+      } else if (outcome.kind === "error" && !outcome.error.clearExisting) {
+        setNotice({
+          blockRegeneration: true,
+          canCheckStatus: true,
+          message: "Regeneration finished, but Beeexy couldn't confirm the latest result. Your previous result remains available.",
+          tone: "warning",
+        });
+      } else if (outcome.kind === "error") {
+        setRegeneration({ kind: "idle", scopeId: analysisId });
+      }
+    } catch (caught) {
+      if (controller.signal.aborted || requestId !== regenerationRequestIdRef.current
+        || (caught instanceof Error && caught.name === "AbortError")) return;
+      const mapped = secondOpinionRegenerationError(caught);
+      if (mapped.clearExisting) {
+        commit({ error: secondOpinionLoadError(caught), kind: "error", scopeId: analysisId });
+        setRegeneration({ kind: "idle", scopeId: analysisId });
+        focusContent();
+      } else {
+        setNotice({
+          blockRegeneration: mapped.blockRegeneration,
+          canCheckStatus: mapped.canCheckStatus,
+          message: mapped.message,
+          tone: mapped.kind === "immutable-input" || mapped.kind === "request-invalid" || mapped.kind === "conflict"
+            ? "warning"
+            : "error",
+        });
+      }
+    } finally {
+      if (regenerationControllerRef.current === controller) regenerationControllerRef.current = null;
+      if (requestId === regenerationRequestIdRef.current) regeneratingRef.current = false;
+    }
+  }, [analysisId, commit, focusContent, load, noticeForLoadedStatus, setNotice]);
+
+  const openRegenerationConfirmation = useCallback(() => {
+    if (!regenerationEligible || regenerationActive || regenerationNotice?.blockRegeneration) return;
+    setRegeneration({ kind: "confirming", scopeId: analysisId });
+  }, [analysisId, regenerationActive, regenerationEligible, regenerationNotice?.blockRegeneration]);
+
+  const closeRegenerationConfirmation = useCallback(() => {
+    if (scopedRegeneration.kind === "confirming") {
+      setRegeneration({ kind: "idle", scopeId: analysisId });
+    }
+  }, [analysisId, scopedRegeneration.kind]);
 
   return (
     <div className="page second-opinion-result-page">
@@ -152,7 +429,7 @@ export function SecondOpinionResultView({ analysisId }: { analysisId: string }) 
           <button
             aria-label="Refresh Second Opinion result"
             className="icon-button"
-            disabled={scopedState.kind !== "ready" || scopedState.refreshing}
+            disabled={scopedState.kind !== "ready" || scopedState.refreshing || regenerationActive}
             onClick={() => void load({ focusAfter: true, preserve: true })}
             type="button"
           >
@@ -191,12 +468,191 @@ export function SecondOpinionResultView({ analysisId }: { analysisId: string }) 
             )}
             <SecondOpinionDisplay
               display={display}
-              onRefresh={() => void load({ focusAfter: true, preserve: true })}
+              onRefresh={regenerationNotice?.canCheckStatus
+                ? () => void checkRegenerationStatus()
+                : () => void load({ focusAfter: true, preserve: true })}
               refreshing={scopedState.refreshing}
             />
+            {(regenerationEligible || scopedRegeneration.kind !== "idle") && (
+              <SecondOpinionRegenerationPanel
+                active={regenerationActive}
+                canRegenerate={regenerationEligible && !regenerationNotice?.blockRegeneration}
+                notice={regenerationNotice}
+                onCheckStatus={() => void checkRegenerationStatus()}
+                onRegenerate={openRegenerationConfirmation}
+                refreshing={scopedState.refreshing}
+                showStatusAction={display.kind !== "pending" && display.kind !== "running"}
+              />
+            )}
           </>
         )}
       </div>
+      {(scopedRegeneration.kind === "confirming" || scopedRegeneration.kind === "submitting") && (
+        <SecondOpinionRegenerationDialog
+          onCancel={closeRegenerationConfirmation}
+          onConfirm={() => void regenerate()}
+          submitting={scopedRegeneration.kind === "submitting"}
+        />
+      )}
+    </div>
+  );
+}
+
+function SecondOpinionRegenerationPanel({
+  active,
+  canRegenerate,
+  notice,
+  onCheckStatus,
+  onRegenerate,
+  refreshing,
+  showStatusAction,
+}: {
+  active: boolean;
+  canRegenerate: boolean;
+  notice: RegenerationNotice | null;
+  onCheckStatus: () => void;
+  onRegenerate: () => void;
+  refreshing: boolean;
+  showStatusAction: boolean;
+}) {
+  return (
+    <section className="second-opinion-regeneration" aria-labelledby="second-opinion-regeneration-title">
+      <div className="second-opinion-regeneration-copy">
+        <span aria-hidden="true"><Icon name="history" size={19} /></span>
+        <div>
+          <p className="eyebrow">Same original information</p>
+          <h2 id="second-opinion-regeneration-title">Create another version</h2>
+          <p>
+            Beeexy will use the same original information. New or changed information requires a New Second Opinion.
+          </p>
+        </div>
+      </div>
+
+      {notice && (
+        <div
+          className={`second-opinion-regeneration-notice ${notice.tone}`}
+          role={notice.tone === "error" ? "alert" : "status"}
+        >
+          <Icon name={notice.tone === "success" ? "check" : "info"} size={17} />
+          <p>{notice.message}</p>
+        </div>
+      )}
+
+      <div className="second-opinion-regeneration-actions">
+        {notice?.canCheckStatus && showStatusAction && (
+          <button
+            aria-busy={refreshing}
+            className="button secondary"
+            disabled={refreshing || active}
+            onClick={onCheckStatus}
+            type="button"
+          >
+            {refreshing ? "Checking status..." : "Check status"}
+          </button>
+        )}
+        <button
+          aria-busy={active}
+          className="button primary"
+          disabled={!canRegenerate || refreshing || active}
+          onClick={onRegenerate}
+          type="button"
+        >
+          {active ? "Regenerating..." : "Regenerate"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function SecondOpinionRegenerationDialog({
+  onCancel,
+  onConfirm,
+  submitting,
+}: {
+  onCancel: () => void;
+  onConfirm: () => void;
+  submitting: boolean;
+}) {
+  const titleId = useId();
+  const descriptionId = useId();
+  const dialogRef = useRef<HTMLElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    cancelRef.current?.focus();
+    return () => {
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, []);
+
+  function handleKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
+    if (event.key === "Escape" && !submitting) {
+      event.preventDefault();
+      onCancel();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const controls = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
+      "button:not([disabled]), a[href], [tabindex]:not([tabindex='-1'])",
+    ) ?? []);
+    if (!controls.length) return;
+    const first = controls[0];
+    const last = controls[controls.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  return (
+    <div
+      className="patient-dialog-backdrop second-opinion-regeneration-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !submitting) onCancel();
+      }}
+    >
+      <section
+        aria-busy={submitting}
+        aria-describedby={descriptionId}
+        aria-labelledby={titleId}
+        aria-modal="true"
+        className="patient-dialog second-opinion-regeneration-dialog"
+        onKeyDown={handleKeyDown}
+        ref={dialogRef}
+        role="dialog"
+      >
+        <span aria-hidden="true"><Icon name="history" size={22} /></span>
+        <p className="eyebrow">Second Opinion</p>
+        <h2 id={titleId}>Regenerate this Second Opinion?</h2>
+        <p id={descriptionId}>
+          Beeexy will create another version from the same original information. To use new or changed information,
+          start a New Second Opinion instead.
+        </p>
+        <div>
+          <button
+            className="button secondary"
+            disabled={submitting}
+            onClick={onCancel}
+            ref={cancelRef}
+            type="button"
+          >
+            Cancel
+          </button>
+          <button
+            aria-busy={submitting}
+            className="button primary"
+            disabled={submitting}
+            onClick={onConfirm}
+            type="button"
+          >
+            {submitting ? "Regenerating..." : "Regenerate"}
+          </button>
+        </div>
+      </section>
     </div>
   );
 }

@@ -2039,6 +2039,26 @@ textarea { min-height: 112px; resize: vertical; line-height: 1.5; }
 .second-opinion-result-skeleton-section { height: 126px; }
 .second-opinion-result-skeleton-section.short { height: 96px; }
 .second-opinion-result-skeleton-disclaimer { height: 88px; }
+.second-opinion-regeneration { display: grid; min-width: 0; gap: 13px; margin-top: 14px; border: 1px solid var(--primary-line); border-radius: 17px; padding: 15px; background: var(--surface); box-shadow: var(--shadow-card); }
+.second-opinion-regeneration-copy { display: grid; min-width: 0; grid-template-columns: 40px minmax(0,1fr); align-items: start; gap: 11px; }
+.second-opinion-regeneration-copy > span { display: grid; width: 40px; height: 40px; place-items: center; border-radius: 12px; color: var(--primary); background: var(--primary-soft); }
+.second-opinion-regeneration-copy > div { min-width: 0; }
+.second-opinion-regeneration-copy .eyebrow { color: var(--primary); }
+.second-opinion-regeneration-copy h2 { margin-top: 2px; font-size: 14px; line-height: 1.35; }
+.second-opinion-regeneration-copy h2 + p { margin-top: 5px; color: var(--ink-2); font-size: 12px; line-height: 1.55; overflow-wrap: anywhere; }
+.second-opinion-regeneration-notice { display: flex; min-width: 0; align-items: flex-start; gap: 8px; border-radius: 12px; padding: 10px 11px; background: var(--surface-subtle); }
+.second-opinion-regeneration-notice svg { flex: 0 0 auto; margin-top: 1px; }
+.second-opinion-regeneration-notice p { min-width: 0; color: var(--ink-2); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.second-opinion-regeneration-notice.success { color: var(--green); background: var(--green-soft); }
+.second-opinion-regeneration-notice.progress { color: var(--primary); background: var(--primary-soft); }
+.second-opinion-regeneration-notice.warning { color: var(--amber); background: var(--amber-soft); }
+.second-opinion-regeneration-notice.error { color: var(--red); background: var(--red-soft); }
+.second-opinion-regeneration-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 9px; }
+.second-opinion-regeneration-actions .button { min-width: 132px; }
+.patient-dialog.second-opinion-regeneration-dialog { width: min(100%, 440px); margin: 0 auto; }
+.patient-dialog.second-opinion-regeneration-dialog > span { color: var(--primary); background: var(--primary-soft); }
+.second-opinion-regeneration-dialog .eyebrow { margin-top: 14px; color: var(--primary); }
+.second-opinion-regeneration-dialog .eyebrow + h2 { margin-top: 3px; }
 
 @media (max-width: 350px) {
   .second-opinion-result-header { align-items: stretch; flex-direction: column; }
@@ -2046,6 +2066,8 @@ textarea { min-height: 112px; resize: vertical; line-height: 1.5; }
   .second-opinion-result-title { padding-right: 48px; }
   .second-opinion-result-metadata dl > div { grid-template-columns: 1fr; gap: 3px; }
   .second-opinion-result-metadata dd { text-align: left; }
+  .second-opinion-regeneration-actions { display: grid; grid-template-columns: 1fr; }
+  .second-opinion-regeneration-actions .button { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
