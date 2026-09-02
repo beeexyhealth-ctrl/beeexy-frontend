@@ -39,12 +39,16 @@ type ExpiredDocument = {
 export type AiTemporaryDocumentUploaderProps = {
   value: AiDocument | null;
   onChange: (document: AiDocument | null) => void;
+  filename?: string | null;
+  onFilenameChange?: (filename: string | null) => void;
   disabled?: boolean;
 };
 
 export function AiTemporaryDocumentUploader({
   value,
   onChange,
+  filename,
+  onFilenameChange,
   disabled = false,
 }: AiTemporaryDocumentUploaderProps) {
   const inputId = useId();
@@ -54,6 +58,7 @@ export function AiTemporaryDocumentUploader({
   const uploadPendingRef = useRef(false);
   const invalidatedDocumentIdsRef = useRef(new Set<string>());
   const onChangeRef = useRef(onChange);
+  const onFilenameChangeRef = useRef(onFilenameChange);
   const [fileState, setFileState] = useState<FileState>({ kind: "idle" });
   const [uploadedFilename, setUploadedFilename] = useState<string | null>(null);
   const [expiredDocument, setExpiredDocument] = useState<ExpiredDocument | null>(null);
@@ -63,6 +68,10 @@ export function AiTemporaryDocumentUploader({
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
+
+  useEffect(() => {
+    onFilenameChangeRef.current = onFilenameChange;
+  }, [onFilenameChange]);
 
   useEffect(() => () => {
     uploadPendingRef.current = false;
@@ -79,6 +88,7 @@ export function AiTemporaryDocumentUploader({
       invalidatedDocumentIdsRef.current.add(value.documentId);
       setExpiredDocument({ document: value, filename: uploadedFilename });
       setNotice("This temporary document reached its returned expiry time and is no longer selected for use.");
+      onFilenameChangeRef.current?.(null);
       onChangeRef.current(null);
     };
 
@@ -96,7 +106,7 @@ export function AiTemporaryDocumentUploader({
     displayedDocument.status !== "active"
     || expiredDocument?.document.documentId === displayedDocument.documentId
   ));
-  const displayedFilename = value ? uploadedFilename : expiredDocument?.filename ?? null;
+  const displayedFilename = value ? filename ?? uploadedFilename : expiredDocument?.filename ?? null;
   const uploading = fileState.kind === "uploading";
 
   function selectFile(event: ChangeEvent<HTMLInputElement>) {
@@ -127,6 +137,7 @@ export function AiTemporaryDocumentUploader({
       const document = await beeexyPhase10Api.uploadAiDocument(file, controller.signal);
       if (controller.signal.aborted) return;
       setUploadedFilename(file.name);
+      onFilenameChangeRef.current?.(file.name);
       setExpiredDocument(null);
       setFileState({ kind: "idle" });
       setNotice("Document uploaded and available temporarily.");
@@ -156,6 +167,7 @@ export function AiTemporaryDocumentUploader({
   function handleRemoved(intent: RemoveIntent, outcome: "removed" | "unavailable") {
     setExpiredDocument(null);
     setUploadedFilename(null);
+    onFilenameChangeRef.current?.(null);
     setFileState({ kind: "idle" });
     setRemoveIntent(null);
     onChangeRef.current(null);

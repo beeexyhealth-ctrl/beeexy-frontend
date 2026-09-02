@@ -39,11 +39,11 @@ const assistants: Array<{
     className: "primary-tool",
   },
   {
-    href: "/second-opinion",
+    href: "/ai/second-opinion",
     icon: "sparkles",
     title: "AI Second Opinion",
-    description: "Get an independent perspective on a diagnosis, treatment or test result.",
-    action: "Get a second opinion",
+    description: "Request an educational review of a case and selected health information.",
+    action: "Request a second opinion",
     badge: "Available",
   },
   {

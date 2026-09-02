@@ -1,6 +1,5 @@
-import { SecondOpinionFlow } from "@/features/second-opinion/second-opinion-flow";
+import { redirect } from "next/navigation";
 
-export default async function SecondOpinionPage({ searchParams }: { searchParams: Promise<{ source?: string }> }) {
-  const { source } = await searchParams;
-  return <SecondOpinionFlow fromPreTriage={source === "pretriage"} />;
+export default function SecondOpinionPage() {
+  redirect("/ai/second-opinion");
 }
