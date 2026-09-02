@@ -14,7 +14,6 @@ import {
 } from "@/features/second-opinion/second-opinion-request-state";
 import { beeexyPhase10Api } from "@/lib/beeexy-api/phase-10-api";
 import SecondOpinionRequestPage from "@/app/ai/second-opinion/page";
-import SecondOpinionHandoffPage from "@/app/ai/second-opinions/[analysisId]/page";
 import { HomeDashboard } from "@/features/home/home-dashboard";
 
 const mocks = vi.hoisted(() => ({
@@ -270,12 +269,6 @@ describe("Phase 10.4 route and staged request", () => {
     render(<HomeDashboard configured email="alex@example.test" name="Alex" signedIn />);
     expect(screen.getByRole("link", { name: /AI Second Opinion/i })).toHaveAttribute("href", "/ai/second-opinion");
     expect(screen.queryByText(/3 independent|GPT|Gemini|Claude/i)).not.toBeInTheDocument();
-  });
-
-  it("keeps the future result route to a safe handoff without rendering a result", () => {
-    render(<SecondOpinionHandoffPage />);
-    expect(screen.getByRole("heading", { name: /request was accepted/i })).toBeInTheDocument();
-    expect(screen.queryByText(/Important points|possible questions|missing information|AI-generated/i)).not.toBeInTheDocument();
   });
 
   it("shows only authorized patient options with no arbitrary ID input", () => {
