@@ -1572,7 +1572,7 @@ textarea { min-height: 112px; resize: vertical; line-height: 1.5; }
 .appointment-cancellation-notice.success svg { color: var(--green); }
 .appointment-cancellation-notice p { font-size: 9.5px; line-height: 1.5; }
 .appointment-cancel-backdrop { padding-bottom: max(18px, env(safe-area-inset-bottom)); }
-.appointment-cancel-dialog { width: min(100%, 430px); margin: 0 auto; }
+.appointment-cancel-dialog { width: min(100%, 430px); max-height: calc(100dvh - 36px); overflow-y: auto; overscroll-behavior: contain; margin: 0 auto; }
 .appointment-cancel-dialog > dl { display: grid; margin: 14px 0 0; border-radius: 12px; padding: 2px 11px; background: var(--surface-subtle); }
 .appointment-cancel-dialog > dl > div { display: grid; grid-template-columns: minmax(0,.7fr) minmax(0,1.3fr); gap: 10px; padding: 9px 0; }
 .appointment-cancel-dialog > dl > div + div { border-top: 1px solid var(--line); }

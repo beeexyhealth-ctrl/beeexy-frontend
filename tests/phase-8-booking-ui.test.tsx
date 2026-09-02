@@ -3,7 +3,10 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DoctorAvailability } from "@/features/appointments/doctor-availability";
-import { notifyDoctorAvailabilityChanged } from "@/features/appointments/appointment-refresh";
+import {
+  APPOINTMENT_LIST_REFRESH_EVENT,
+  notifyDoctorAvailabilityChanged,
+} from "@/features/appointments/appointment-refresh";
 import type {
   AccessiblePatient,
   AvailabilitySlot,
@@ -161,9 +164,10 @@ describe("Phase 8.2 doctor availability", () => {
     renderAvailability();
 
     expect(screen.getByRole("status", { name: /loading appointment availability/i })).toBeInTheDocument();
-    const first = await screen.findByRole("button", { name: /9:00 AM to 9:30 AM, In person/i });
+    expect(screen.getByRole("region", { name: "Available appointments" })).toHaveAttribute("id", "availability");
+    const first = await screen.findByRole("button", { name: /9:00 AM to 9:30 AM, In-person visit/i });
     const group = screen.getByRole("group", { name: "Thursday, September 10" });
-    expect(within(group).getAllByRole("button")).toEqual([first, slotButton(/10:30 AM to 11:00 AM, Virtual/i)]);
+    expect(within(group).getAllByRole("button")).toEqual([first, slotButton(/10:30 AM to 11:00 AM, Virtual visit/i)]);
     expect(first).toHaveAccessibleName(/Synthetic Demo Clinic Aurora.*Synthetic Aurora Central Location.*America\/Lima/i);
     expect(screen.getAllByText("Clinic time · America/Lima")).toHaveLength(2);
     expect(beeexyPhase8Api.listDoctorSlots).toHaveBeenCalledWith(doctor.doctorId, {}, expect.any(AbortSignal));
@@ -218,7 +222,7 @@ describe("Phase 8.2 doctor availability", () => {
     expect(first).toHaveAttribute("aria-pressed", "false");
     expect(second).toHaveAttribute("aria-pressed", "true");
     expect(reviewValue("Date and time")).toHaveTextContent("10:30 AM to 11:00 AM");
-    expect(reviewValue("Modality")).toHaveTextContent("Virtual");
+    expect(reviewValue("Modality")).toHaveTextContent("Virtual visit");
   });
 
   it("uses the active PatientProfile by default and sends the exact selected patient, slot, modality, reason, and key", async () => {
@@ -300,23 +304,28 @@ describe("Phase 8.2 doctor availability", () => {
     expect(await screen.findByText("Appointment request submitted")).toBeInTheDocument();
   });
 
-  it("shows Requested success and refetches availability so the reserved slot disappears", async () => {
+  it("shows the shared Requested label and refreshes appointments plus availability after success", async () => {
     vi.mocked(beeexyPhase8Api.listDoctorSlots)
       .mockResolvedValueOnce([firstSlot, secondSlot])
       .mockResolvedValueOnce([secondSlot]);
+    const listRefresh = vi.fn();
+    window.addEventListener(APPOINTMENT_LIST_REFRESH_EVENT, listRefresh);
     renderAvailability();
 
     fireEvent.click(await screen.findByRole("button", { name: /9:00 AM to 9:30 AM/i }));
     fireEvent.click(requestButton());
 
     expect(await screen.findByText("Appointment request submitted")).toBeInTheDocument();
-    expect(screen.getByText("Requested")).toBeInTheDocument();
+    expect(screen.getByText("Pending confirmation")).toBeInTheDocument();
     expect(screen.getByText(/clinic will review your request/i)).toBeInTheDocument();
+    expect(listRefresh).toHaveBeenCalledTimes(1);
+    expect((listRefresh.mock.calls[0][0] as CustomEvent).detail).toEqual({ patientId: primaryPatient.profileId });
     await waitFor(() => expect(beeexyPhase8Api.listDoctorSlots).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole("link", { name: "View appointments" })).toHaveAttribute("href", "/appointments");
     fireEvent.click(screen.getByRole("button", { name: "View more times" }));
     expect(screen.queryByRole("button", { name: /9:00 AM to 9:30 AM/i })).not.toBeInTheDocument();
     expect(slotButton(/10:30 AM to 11:00 AM/i)).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /view appointments/i })).not.toBeInTheDocument();
+    window.removeEventListener(APPOINTMENT_LIST_REFRESH_EVENT, listRefresh);
   });
 
   it("refreshes and clears an occupied slot after a reservation conflict", async () => {
@@ -425,10 +434,15 @@ describe("Phase 8.2 doctor availability", () => {
     expect(reason.getAttribute("aria-describedby")).toContain(error.id);
   });
 
-  it("uses generic safe copy for an unexpected booking failure", async () => {
-    vi.mocked(beeexyPhase8Api.createAppointment).mockRejectedValue(new BeeexyApiError(400, {
-      problem: { detail: "internal binding diagnostics" },
-    }));
+  it("uses generic safe copy and a fresh attempt after a definitive booking failure", async () => {
+    const firstKey = "93000000-0000-4000-8000-000000000001";
+    const secondKey = "93000000-0000-4000-8000-000000000002";
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValueOnce(firstKey).mockReturnValueOnce(secondKey);
+    vi.mocked(beeexyPhase8Api.createAppointment)
+      .mockRejectedValueOnce(new BeeexyApiError(400, {
+        problem: { detail: "internal binding diagnostics" },
+      }))
+      .mockResolvedValueOnce(appointmentFor(firstSlot));
     renderAvailability();
 
     fireEvent.click(await screen.findByRole("button", { name: /9:00 AM to 9:30 AM/i }));
@@ -436,5 +450,9 @@ describe("Phase 8.2 doctor availability", () => {
 
     expect(await screen.findByText("We couldn’t request this appointment. Check your selections and try again.")).toBeInTheDocument();
     expect(screen.queryByText("internal binding diagnostics")).not.toBeInTheDocument();
+    fireEvent.click(requestButton());
+    await screen.findByText("Appointment request submitted");
+    expect(vi.mocked(beeexyPhase8Api.createAppointment).mock.calls.map(([request]) => request.idempotencyKey))
+      .toEqual([firstKey, secondKey]);
   });
 });

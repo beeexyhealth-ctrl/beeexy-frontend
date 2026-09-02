@@ -252,6 +252,17 @@ describe("Phase 8.6 transactional appointment rescheduling", () => {
     expect(screen.getAllByText("Thursday, September 10, 2026").length).toBeGreaterThan(0);
   });
 
+  it("uses the shared patient-facing status label for a Requested appointment", async () => {
+    vi.mocked(beeexyPhase8Api.getAppointment).mockResolvedValueOnce(detailWithStatus("Requested"));
+    render(<AppointmentDetailView appointmentId={confirmedDetail.appointmentId} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Reschedule" }));
+
+    const current = within(await screen.findByRole("dialog", { name: "Reschedule appointment" }))
+      .getByRole("region", { name: "Current appointment" });
+    expect(within(current).getByText("Pending confirmation")).toBeInTheDocument();
+    expect(within(current).queryByText("Requested")).not.toBeInTheDocument();
+  });
+
   it("reuses accessible date/slot controls and prevents current or incompatible selection", async () => {
     render(<AppointmentDetailView appointmentId={confirmedDetail.appointmentId} />);
     const dialog = await openReschedule();
@@ -278,10 +289,10 @@ describe("Phase 8.6 transactional appointment rescheduling", () => {
     const next = within(dialog).getByRole("article", { name: "Friday, September 11, 2026" });
     expect(current).toHaveTextContent("9:00 AM – 9:30 AM");
     expect(current).toHaveTextContent("Current Care Clinic · Lima Central");
-    expect(current).toHaveTextContent("In person · America/Lima");
+    expect(current).toHaveTextContent("In-person visit · America/Lima");
     expect(next).toHaveTextContent("11:00 AM – 11:30 AM");
     expect(next).toHaveTextContent("Current Care Clinic");
-    expect(next).toHaveTextContent("In person · America/Lima");
+    expect(next).toHaveTextContent("In-person visit · America/Lima");
     expect(within(dialog).getByText(/current appointment stays reserved unless this change succeeds/i)).toBeInTheDocument();
   });
 
@@ -297,7 +308,7 @@ describe("Phase 8.6 transactional appointment rescheduling", () => {
 
     const target = await within(dialog).findByRole("button", { name: /10:00 AM to 10:30 AM.*Pacific Care Clinic.*America\/Los_Angeles/i });
     fireEvent.click(target);
-    expect(within(dialog).getByText("In person · America/Los_Angeles")).toBeInTheDocument();
+    expect(within(dialog).getByText("In-person visit · America/Los_Angeles")).toBeInTheDocument();
     expect(beeexyPhase8Api.listDoctorSlots).toHaveBeenLastCalledWith(otherDoctor.doctorId, {}, expect.any(AbortSignal));
   });
 

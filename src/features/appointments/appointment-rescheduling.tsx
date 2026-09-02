@@ -20,7 +20,10 @@ import { beeexyPhase7Api } from "@/lib/beeexy-api/phase-7-api";
 import { beeexyPhase8Api } from "@/lib/beeexy-api/phase-8-api";
 import { BeeexyApiError, BeeexyNetworkError } from "@/lib/beeexy-api/problem-details";
 import { canPatientRescheduleAppointment } from "./appointment-detail-state";
-import { formatAppointmentDateTime } from "./appointment-list-state";
+import {
+  APPOINTMENT_STATUS_LABELS,
+  formatAppointmentDateTime,
+} from "./appointment-list-state";
 import {
   AvailabilityDateSelector,
   AvailabilitySkeleton,
@@ -528,7 +531,7 @@ export function RescheduleAppointmentDialog({
             <div><dt>Date</dt><dd>{currentSchedule.date}</dd></div>
             <div><dt>Time</dt><dd>{currentSchedule.time}</dd></div>
             <div><dt>Clinic time zone</dt><dd>{currentSchedule.timeZone}</dd></div>
-            <div><dt>Status</dt><dd>{detail.status}</dd></div>
+            <div><dt>Status</dt><dd>{APPOINTMENT_STATUS_LABELS[detail.status]}</dd></div>
             <div><dt>Location</dt><dd>{currentLocation.clinicName}{currentLocation.locationName ? ` · ${currentLocation.locationName}` : ""}</dd></div>
           </dl>
         </section>

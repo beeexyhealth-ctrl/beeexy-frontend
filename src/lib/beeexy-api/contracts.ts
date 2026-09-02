@@ -825,3 +825,176 @@ export type Phase8ErrorCode =
 export type Phase8ProblemDetails = Omit<ProblemDetails, "errorCode"> & {
   errorCode?: Phase8ErrorCode;
 };
+
+// Phase 10 AI transport contracts.
+export type AiConversationPurpose =
+  | "GENERAL_HEALTH"
+  | "MEDICAL_TERMS"
+  | "SYMPTOM_DISCUSSION"
+  | "CLINICIAN_QUESTIONS";
+
+export type AiMessageRole = "user" | "assistant";
+
+export type AiConversationExecutionStatus =
+  | "completed"
+  | "rejected"
+  | "failed";
+
+export interface AiDisclaimer {
+  version: string;
+  content: string;
+}
+
+export interface CreateAiConversationRequest {
+  purpose: AiConversationPurpose;
+  patientId?: Uuid | null;
+}
+
+export interface AiConversation {
+  conversationId: Uuid;
+  patientId: Uuid | null;
+  createdAt: IsoInstant;
+  disclaimer: AiDisclaimer;
+}
+
+export interface AiConversationSummary {
+  conversationId: Uuid;
+  patientId: Uuid | null;
+  createdAt: IsoInstant;
+}
+
+export interface AiConversationPage {
+  items: AiConversationSummary[];
+  nextCursor: string | null;
+}
+
+export interface ListAiConversationsQuery {
+  cursor?: string;
+  pageSize?: number;
+}
+
+export interface AiConversationMessage {
+  messageId: Uuid;
+  role: AiMessageRole;
+  content: string;
+  sequence: number;
+  createdAt: IsoInstant;
+}
+
+export interface AiConversationDetail {
+  conversation: AiConversationSummary;
+  messages: AiConversationMessage[];
+  disclaimer: AiDisclaimer;
+}
+
+export interface SendAiConversationMessageRequest {
+  content: string;
+}
+
+export interface AiConversationExecution {
+  conversationId: Uuid;
+  userMessageId: Uuid;
+  executionId: Uuid;
+  status: AiConversationExecutionStatus;
+  assistantMessage?: AiConversationMessage;
+  disclaimer: AiDisclaimer;
+}
+
+export type AiDocumentStatus = "active" | "deleted" | "expired";
+
+export interface AiDocument {
+  documentId: Uuid;
+  contentType: "application/pdf" | "text/plain";
+  sizeBytes: number;
+  uploadedAt: IsoInstant;
+  expiresAt: IsoInstant;
+  status: AiDocumentStatus;
+}
+
+export interface RequestSecondOpinionRequest {
+  patientId: Uuid;
+  text?: string | null;
+  documentIds?: Uuid[] | null;
+  preTriageSessionId?: Uuid | null;
+  clinicalHistoryEventIds?: Uuid[] | null;
+}
+
+export type SecondOpinionTerminalStatus =
+  | "succeeded"
+  | "failed"
+  | "rejected";
+
+export type SecondOpinionStatus =
+  | "pending"
+  | "running"
+  | SecondOpinionTerminalStatus;
+
+export interface SecondOpinionAccepted {
+  analysisId: Uuid;
+  executionId: Uuid;
+  status: SecondOpinionTerminalStatus;
+  statusUrl: string;
+}
+
+export interface SecondOpinionResult {
+  summary: string;
+  importantPoints: string[];
+  possibleQuestionsForDoctor: string[];
+  missingInformation: string[];
+  disclaimer: string;
+}
+
+export interface SecondOpinionMetadata {
+  aiGenerated: boolean;
+  generatedAt: IsoInstant;
+  resultVersion: string;
+  provider?: string;
+  modelVersion?: string;
+  promptVersion?: string;
+  disclaimerVersion: string;
+}
+
+export interface SecondOpinion {
+  analysisId: Uuid;
+  patientId: Uuid;
+  executionId?: Uuid;
+  status: SecondOpinionStatus;
+  result?: SecondOpinionResult;
+  metadata?: SecondOpinionMetadata;
+  safeMessage?: string;
+}
+
+export type Phase10ErrorCode =
+  | "ai.conversation.purpose_invalid"
+  | "ai.conversation.message_invalid"
+  | "ai.conversation.request_not_supported"
+  | "ai.conversation.message_limit_reached"
+  | "ai.conversation.page_size_invalid"
+  | "ai.conversation.cursor_invalid"
+  | "ai.conversation.unsupported_field"
+  | "ai.conversation.not_found"
+  | "ai.conversation.execution_conflict"
+  | "ai.document.single_file_required"
+  | "ai.document.too_large"
+  | "ai.document.unsupported_media"
+  | "ai.document.empty"
+  | "ai.document.size_mismatch"
+  | "ai.document.file_unsafe"
+  | "ai.document.unusable_text"
+  | "ai.document.not_found"
+  | "ai.second_opinion.unsupported_field"
+  | "ai.second_opinion.source_ids_invalid"
+  | "ai.second_opinion.input_required"
+  | "ai.second_opinion.text_invalid"
+  | "ai.second_opinion.document_limit"
+  | "ai.second_opinion.history_limit"
+  | "ai.second_opinion.document_unavailable"
+  | "ai.second_opinion.document_text_unavailable"
+  | "ai.second_opinion.not_found"
+  | "ai.second_opinion.execution_conflict"
+  | "ai.second_opinion.regeneration_body_not_allowed"
+  | "ai.second_opinion.immutable_input_invalid";
+
+export type Phase10ProblemDetails = Omit<ProblemDetails, "errorCode"> & {
+  errorCode?: Phase10ErrorCode;
+};

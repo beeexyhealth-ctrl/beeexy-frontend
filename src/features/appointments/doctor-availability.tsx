@@ -20,8 +20,14 @@ import {
 } from "@/lib/beeexy-api/phase-8-api";
 import { BeeexyApiError, BeeexyNetworkError } from "@/lib/beeexy-api/problem-details";
 import {
+  APPOINTMENT_MODALITY_LABELS,
+  APPOINTMENT_STATUS_LABELS,
+} from "./appointment-list-state";
+import {
   DOCTOR_AVAILABILITY_REFRESH_EVENT,
   doctorAvailabilityRefreshDoctorId,
+  notifyAppointmentListChanged,
+  notifyDoctorAvailabilityChanged,
 } from "./appointment-refresh";
 
 const MAX_REASON_LENGTH = 500;
@@ -177,7 +183,8 @@ export function DoctorAvailability({ doctor }: { doctor: DoctorDetail }) {
       if (controller.signal.aborted) return;
       setSuccess({ appointment, patientLabel: displayPatientName(selectedPatient) });
       attemptRef.current = null;
-      void loadAvailability(false);
+      notifyAppointmentListChanged(selectedPatient.profileId);
+      notifyDoctorAvailabilityChanged(doctor.doctorId);
     } catch (error) {
       if (controller.signal.aborted) return;
       await handleBookingError(error);
@@ -223,6 +230,7 @@ export function DoctorAvailability({ doctor }: { doctor: DoctorDetail }) {
     }
 
     if (error instanceof BeeexyApiError && error.status === 401) {
+      attemptRef.current = null;
       setBookingError("Your session has ended. Sign in again to request this appointment.");
       return;
     }
@@ -232,6 +240,7 @@ export function DoctorAvailability({ doctor }: { doctor: DoctorDetail }) {
       return;
     }
 
+    attemptRef.current = null;
     setBookingError("We couldn’t request this appointment. Check your selections and try again.");
   }
 
@@ -250,7 +259,7 @@ export function DoctorAvailability({ doctor }: { doctor: DoctorDetail }) {
   }
 
   return (
-    <section className="doctor-availability" aria-labelledby="doctor-availability-heading">
+    <section className="doctor-availability" aria-labelledby="doctor-availability-heading" id="availability">
       <header className="availability-heading">
         <span aria-hidden="true"><Icon name="calendar" size={18} /></span>
         <div>
@@ -453,7 +462,7 @@ function AppointmentBookingForm({
         <div><dt>Clinic</dt><dd>{location.clinicName}{location.locationName ? ` · ${location.locationName}` : ""}</dd></div>
         <div><dt>Date and time</dt><dd>{formatFullSlot(selectedSlot)}</dd></div>
         <div><dt>Modality</dt><dd>{modalityLabel(selectedSlot.modality)}</dd></div>
-        <div><dt>Status after request</dt><dd>Requested · awaiting clinic review</dd></div>
+        <div><dt>Status after request</dt><dd>{APPOINTMENT_STATUS_LABELS.Requested} · awaiting clinic review</dd></div>
       </dl>
 
       <label className="booking-reason-field" htmlFor={reasonId}>
@@ -514,7 +523,7 @@ function AppointmentRequestSuccess({ doctor, onReset, success }: {
       <h4>The clinic will review your request.</h4>
       <p>You’ll receive an update after the clinic confirms or rejects this appointment request.</p>
       <dl className="booking-review-list">
-        <div><dt>Status</dt><dd><span className="requested-status">{success.appointment.status}</span></dd></div>
+        <div><dt>Status</dt><dd><span className="requested-status">{APPOINTMENT_STATUS_LABELS[success.appointment.status]}</span></dd></div>
         <div><dt>Patient</dt><dd>{success.patientLabel}</dd></div>
         <div><dt>Doctor</dt><dd>{doctor.displayName}</dd></div>
         <div><dt>Clinic</dt><dd>{location.clinicName}{location.locationName ? ` · ${location.locationName}` : ""}</dd></div>
@@ -523,7 +532,7 @@ function AppointmentRequestSuccess({ doctor, onReset, success }: {
       </dl>
       <div className="request-success-actions">
         <button className="button secondary" onClick={onReset} type="button">View more times</button>
-        <Link className="button primary" href="/doctors">Browse doctors</Link>
+        <Link className="button primary" href="/appointments">View appointments</Link>
       </div>
     </div>
   );
@@ -611,7 +620,7 @@ export function formatFullSlot(slot: Pick<AvailabilitySlot, "startsAt" | "endsAt
 }
 
 export function modalityLabel(modality: AppointmentModality) {
-  return modality === "virtual" ? "Virtual" : "In person";
+  return APPOINTMENT_MODALITY_LABELS[modality];
 }
 
 function patientOptionLabel(patient: AccessiblePatient) {

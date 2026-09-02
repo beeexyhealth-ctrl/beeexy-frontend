@@ -7,12 +7,14 @@ import { sessionFromAuthentication } from "./session-storage";
 type FetchImplementation = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 type RequestOptions = {
-  body?: unknown;
   expectedStatus?: number | number[];
   headers?: HeadersInit;
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   signal?: AbortSignal;
-};
+} & (
+  | { body?: unknown; formData?: never }
+  | { body?: never; formData: FormData }
+);
 
 export type BeeexyApiResponse<T> = {
   data: T;
@@ -137,12 +139,15 @@ export class BeeexyApiClient {
     if (options.body !== undefined) headers.set("Content-Type", "application/json");
     if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
 
+    const body = options.formData
+      ?? (options.body === undefined ? undefined : JSON.stringify(options.body));
+
     try {
       return await this.fetchImplementation(`${this.baseUrl}${path}`, {
         method: options.method || "GET",
         credentials: "include",
         headers,
-        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        body,
         signal: options.signal,
       });
     } catch (error) {
@@ -153,9 +158,17 @@ export class BeeexyApiClient {
 
   private async readResponseWithStatus<T>(response: Response, expectedStatus?: number | number[]): Promise<BeeexyApiResponse<T>> {
     await this.assertExpectedResponse(response, expectedStatus);
-    const data = response.status === 202 || response.status === 204
-      ? undefined as T
-      : await response.json() as T;
+    let data: T;
+
+    if (response.status === 204) {
+      data = undefined as T;
+    } else if (response.status === 202) {
+      const content = await response.text();
+      data = content.trim() === "" ? undefined as T : JSON.parse(content) as T;
+    } else {
+      data = await response.json() as T;
+    }
+
     return { data, status: response.status };
   }
 
