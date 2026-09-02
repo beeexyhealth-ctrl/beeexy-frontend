@@ -693,13 +693,19 @@ export function QuickReplies({
 export function ChatComposer({
   disabled = false,
   hint,
+  label = "Describe what you are experiencing",
   loading = false,
+  maxLength = 4000,
   onSubmit,
+  placeholder = "Describe what you’re experiencing",
 }: {
   disabled?: boolean;
   hint?: string;
+  label?: string;
   loading?: boolean;
+  maxLength?: number;
   onSubmit?: (value: string) => Promise<void> | void;
+  placeholder?: string;
 }) {
   const id = useId();
   const hintId = `${id}-hint`;
@@ -735,13 +741,13 @@ export function ChatComposer({
 
   return (
     <form className="chat-composer" onSubmit={submitForm} aria-label="Message Beeexy">
-      <label className="sr-only" htmlFor={id}>Describe what you are experiencing</label>
+      <label className="sr-only" htmlFor={id}>{label}</label>
       <textarea
         id={id}
         aria-describedby={hintId}
         disabled={disabled || loading}
-        maxLength={4000}
-        placeholder="Describe what you’re experiencing"
+        maxLength={maxLength}
+        placeholder={placeholder}
         rows={1}
         ref={textareaRef}
         value={value}

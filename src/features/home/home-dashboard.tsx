@@ -22,6 +22,14 @@ const assistants: Array<{
   title: string;
 }> = [
   {
+    href: "/ai/conversations",
+    icon: "message",
+    title: "AI Conversations",
+    description: "Ask general health questions, understand medical terms, or prepare for a doctor visit.",
+    action: "Open conversations",
+    badge: "New",
+  },
+  {
     href: "/pre-triage/new",
     icon: "activity",
     title: "Pre-Triage",
