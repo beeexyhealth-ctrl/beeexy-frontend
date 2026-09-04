@@ -1638,6 +1638,7 @@
     padding: 3px 8px;
     border-radius: 100px;
     backdrop-filter: blur(4px);
+    pointer-events: none;
   }
   .video-card-info {
     padding: 12px 14px 14px;
@@ -1655,6 +1656,35 @@
     font-weight: 300;
     color: rgba(255,255,255,0.75);
     line-height: 1.45;
+  }
+  .symptom-education-video {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+    position: relative;
+    z-index: 1;
+  }
+  .video-card-thumb::before,
+  .video-card-thumb::after {
+    pointer-events: none;
+  }
+  .video-card-fallback {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: #4340E8;
+    color: rgba(255,255,255,0.92);
+    font-size: 11px;
+    line-height: 1.45;
+    text-align: center;
+  }
+  .video-card-fallback[hidden] {
+    display: none;
   }
 
   /* ── Timeline card ── */
@@ -12749,17 +12779,38 @@
   // ═══════════════════════════════════════════════════════════
   // SPECIAL SCREENS (video, timeline, loading, result)
   // ═══════════════════════════════════════════════════════════
+  const educationalVideoBySymptom = Object.freeze({
+    'Fever': 'https://res.cloudinary.com/mhy90qa7/video/upload/v1787888446/FEVER_VIDEO.mp4',
+    'Stomach pain': 'https://res.cloudinary.com/mhy90qa7/video/upload/v1787888428/STOMACH_PAIN_VIDEO.mp4',
+    'Chest pain': 'https://res.cloudinary.com/mhy90qa7/video/upload/v1787888362/CHEST_PAIN_VIDEO.mp4',
+    'Headache': 'https://res.cloudinary.com/mhy90qa7/video/upload/v1787888338/HEADACHE_VIDEO.mp4'
+  });
+
+  function stopActiveEducationalVideo() {
+    document.querySelectorAll('.symptom-education-video').forEach((video) => {
+      video.pause();
+      video.currentTime = 0;
+      video.removeAttribute('src');
+      video.querySelectorAll('source').forEach((source) => source.removeAttribute('src'));
+      video.load();
+      video.remove();
+    });
+  }
+
   const specialScreens = {
     videoCard: () => {
       const body = document.getElementById('ptBody');
+      const symptom = state.answers.symptom;
+      const videoUrl = educationalVideoBySymptom[symptom];
       // Add video card after the user response
       const card = document.createElement('div');
       card.className = 'video-card';
       card.innerHTML = `
         <div class="video-card-thumb">
-          <div class="video-play">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-          </div>
+          <video class="symptom-education-video" controls playsinline preload="metadata" aria-label="Educational video about ${symptom || 'your symptoms'}">
+            ${videoUrl ? `<source src="${videoUrl}" type="video/mp4">` : ''}
+          </video>
+          <div class="video-card-fallback" hidden>This video is temporarily unavailable. You can continue with your assessment.</div>
           <div class="video-card-meta">Educational Video · Duration: 3-5 minutes</div>
         </div>
         <div class="video-card-info">
@@ -12767,8 +12818,11 @@
           <div class="video-card-desc">Dr. Smith, MD explains common causes, what to look for, and when to seek immediate care.</div>
         </div>
       `;
-      card.addEventListener('click', () => {
-        alert('🎬 Video preview\n\nIn production, this will play a real medical video by Dr. Smith MD explaining your symptoms.\n\nFor this prototype it\'s a placeholder.');
+      const video = card.querySelector('.symptom-education-video');
+      const fallback = card.querySelector('.video-card-fallback');
+      if (!videoUrl) fallback.hidden = false;
+      video.addEventListener('error', () => {
+        fallback.hidden = false;
       });
       body.appendChild(card);
 
@@ -13399,6 +13453,7 @@
 
   function restartFlow() {
     // Restart entire pre-triage including Welcome screen
+    stopActiveEducationalVideo();
     enterPretriageView();
   }
 
