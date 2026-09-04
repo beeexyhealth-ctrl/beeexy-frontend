@@ -3583,6 +3583,7 @@
       display: flex;
       align-items: center;
       gap: 14px;
+      cursor: pointer;
     }
     .welcome-video-card::before {
       display: none;
@@ -3913,6 +3914,30 @@
       justify-content: center;
       gap: 10px;
       position: relative;
+      overflow: hidden;
+    }
+    .welcome-modal-video {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+      background: #000000;
+    }
+    .welcome-modal-video-fallback {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: linear-gradient(135deg, #1E1B4B 0%, #0F0F2D 100%);
+      color: rgba(255,255,255,0.82);
+      font-size: 11px;
+      line-height: 1.5;
+      text-align: center;
+    }
+    .welcome-modal-video-fallback[hidden] {
+      display: none;
     }
     .welcome-modal-pause-btn {
       width: 52px; height: 52px;
@@ -8584,7 +8609,7 @@
                 </div>
 
                 <!-- Video card (light, soft purple) -->
-                <div class="welcome-video-card">
+                <div class="welcome-video-card" role="button" tabindex="0" aria-label="Watch Meet your care team introduction" onclick="openWelcomeVideo()" onkeydown="if(event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')){ event.preventDefault(); openWelcomeVideo(); }">
                   <div class="welcome-video-content">
                     <span class="welcome-video-badge">
                       <span class="welcome-video-badge-dot"></span>
@@ -8593,7 +8618,7 @@
                     <div class="welcome-video-title">Meet your care team</div>
                     <div class="welcome-video-sub">A quick hello · 8 sec</div>
                   </div>
-                  <button class="welcome-video-play-btn" onclick="openWelcomeVideo()" aria-label="Watch introduction">
+                  <button class="welcome-video-play-btn" aria-label="Watch introduction">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                   </button>
                 </div>
@@ -8663,7 +8688,7 @@
               </div>
 
               <!-- Video popup modal (only inside welcome) -->
-              <div class="welcome-modal-backdrop" id="welcomeModalBackdrop">
+              <div class="welcome-modal-backdrop" id="welcomeModalBackdrop" role="dialog" aria-modal="true" aria-label="Beeexy Care Team introduction" aria-hidden="true">
                 <div class="welcome-modal-content">
                   <div class="welcome-modal-header">
                     <span class="welcome-modal-badge">
@@ -8675,16 +8700,8 @@
                     </button>
                   </div>
                   <div class="welcome-modal-video-area">
-                    <button class="welcome-modal-pause-btn" onclick="closeWelcomeVideo()" aria-label="Pause">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
-                    </button>
-                    <div class="welcome-modal-video-name">Beeexy Care Team</div>
-                  </div>
-                  <div class="welcome-modal-progress-row">
-                    <div class="welcome-modal-bar">
-                      <div class="welcome-modal-bar-fill" id="welcomeModalBarFill"></div>
-                    </div>
-                    <div class="welcome-modal-meta">0:08</div>
+                    <video id="welcomeIntroVideo" class="welcome-modal-video" controls playsinline preload="metadata" aria-label="Beeexy Care Team introductory video"></video>
+                    <div class="welcome-modal-video-fallback" id="welcomeIntroVideoFallback" hidden>The introduction is temporarily unavailable. You can close this window and continue.</div>
                   </div>
                 </div>
               </div>
@@ -14424,36 +14441,47 @@
   }
 
   // Welcome video popup
-  window.welcomeVideoTimer = null;
+  const welcomeIntroVideoUrl = 'https://res.cloudinary.com/mhy90qa7/video/upload/v1788549408/INTRODUCTORY_VIDEO.mp4';
 
   function openWelcomeVideo() {
     const backdrop = document.getElementById('welcomeModalBackdrop');
-    const barFill = document.getElementById('welcomeModalBarFill');
+    const video = document.getElementById('welcomeIntroVideo');
+    const fallback = document.getElementById('welcomeIntroVideoFallback');
     backdrop.classList.add('open');
-    barFill.classList.remove('animate');
-    void barFill.offsetWidth;
-    barFill.classList.add('animate');
-    if (window.welcomeVideoTimer) clearTimeout(window.welcomeVideoTimer);
-    window.welcomeVideoTimer = setTimeout(() => closeWelcomeVideo(), 8000);
+    backdrop.setAttribute('aria-hidden', 'false');
+    fallback.hidden = true;
+    if (!video.getAttribute('src')) {
+      video.setAttribute('src', welcomeIntroVideoUrl);
+      video.load();
+    }
+    const playback = video.play();
+    if (playback) playback.catch(() => {});
   }
 
   function closeWelcomeVideo() {
     const backdrop = document.getElementById('welcomeModalBackdrop');
-    const barFill = document.getElementById('welcomeModalBarFill');
+    const video = document.getElementById('welcomeIntroVideo');
     backdrop.classList.remove('open');
-    barFill.classList.remove('animate');
-    if (window.welcomeVideoTimer) {
-      clearTimeout(window.welcomeVideoTimer);
-      window.welcomeVideoTimer = null;
-    }
+    backdrop.setAttribute('aria-hidden', 'true');
+    video.pause();
+    video.currentTime = 0;
+    video.removeAttribute('src');
+    video.load();
   }
 
   // Click on backdrop closes video modal
   document.addEventListener('DOMContentLoaded', () => {
     const wmb = document.getElementById('welcomeModalBackdrop');
+    const welcomeVideo = document.getElementById('welcomeIntroVideo');
+    const welcomeVideoFallback = document.getElementById('welcomeIntroVideoFallback');
     if (wmb) {
       wmb.addEventListener('click', (e) => {
         if (e.target.classList.contains('welcome-modal-backdrop')) closeWelcomeVideo();
+      });
+    }
+    if (welcomeVideo) {
+      welcomeVideo.addEventListener('error', () => {
+        welcomeVideoFallback.hidden = false;
       });
     }
     // Initialize notification badge on page load
