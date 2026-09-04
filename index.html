@@ -6,6 +6,14 @@
   <meta name="theme-color" content="#4340E8" />
   <title>Beeexy — Your Health AI</title>
 
+  <script>
+    try {
+      if (sessionStorage.getItem('beeexyDemoAccess') === 'granted') {
+        document.documentElement.classList.add('beeexy-access-granted');
+      }
+    } catch (error) {}
+  </script>
+
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@200;300;400;500;600&family=Instrument+Serif:ital@0;1&family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700&display=swap" rel="stylesheet" />
@@ -22,6 +30,183 @@
       justify-content: center;
       padding: 0;
       overflow-x: hidden;
+    }
+
+    [data-beeexy-protected] {
+      visibility: hidden !important;
+      pointer-events: none !important;
+    }
+    html.beeexy-access-granted [data-beeexy-protected] {
+      visibility: visible !important;
+      pointer-events: auto !important;
+    }
+    html.beeexy-access-granted .beeexy-access-gate {
+      display: none;
+    }
+
+    .beeexy-access-gate {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background:
+        radial-gradient(circle at 22% 16%, rgba(67,64,232,0.10) 0%, transparent 34%),
+        radial-gradient(circle at 78% 84%, rgba(59,130,246,0.08) 0%, transparent 36%),
+        #F4F5FA;
+    }
+    .beeexy-access-card {
+      width: min(100%, 372px);
+      padding: 28px;
+      background: rgba(255,255,255,0.96);
+      border: 1px solid rgba(67,64,232,0.10);
+      border-radius: 24px;
+      box-shadow: 0 24px 70px rgba(15,15,20,0.13), 0 4px 18px rgba(67,64,232,0.08);
+    }
+    .beeexy-access-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+    .beeexy-access-mark {
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #FFFFFF;
+      background: #4340E8;
+      box-shadow: 0 8px 20px rgba(67,64,232,0.24);
+    }
+    .beeexy-access-wordmark {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      color: #0F0F14;
+    }
+    .beeexy-access-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 9px;
+      margin-bottom: 12px;
+      border: 1px solid rgba(67,64,232,0.20);
+      border-radius: 999px;
+      background: rgba(67,64,232,0.07);
+      color: #4340E8;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+    }
+    .beeexy-access-eyebrow::before {
+      content: '';
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: #4340E8;
+    }
+    .beeexy-access-title {
+      margin-bottom: 8px;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 26px;
+      font-weight: 600;
+      line-height: 1.18;
+      letter-spacing: -0.035em;
+      color: #0F0F14;
+    }
+    .beeexy-access-copy {
+      margin-bottom: 22px;
+      color: #5C5C72;
+      font-size: 13px;
+      font-weight: 300;
+      line-height: 1.55;
+    }
+    .beeexy-access-field {
+      display: block;
+      margin-bottom: 14px;
+    }
+    .beeexy-access-label {
+      display: block;
+      margin-bottom: 7px;
+      color: #303044;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .beeexy-access-input {
+      width: 100%;
+      height: 48px;
+      padding: 0 14px;
+      border: 1px solid rgba(15,15,20,0.12);
+      border-radius: 13px;
+      outline: none;
+      background: #FAFAFD;
+      color: #0F0F14;
+      font: 400 14px 'Archivo', sans-serif;
+      transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+    }
+    .beeexy-access-input::placeholder { color: #A1A1B2; }
+    .beeexy-access-input:focus {
+      border-color: rgba(67,64,232,0.62);
+      background: #FFFFFF;
+      box-shadow: 0 0 0 3px rgba(67,64,232,0.10);
+    }
+    .beeexy-access-error {
+      margin: 2px 0 14px;
+      padding: 10px 12px;
+      border: 1px solid rgba(220,38,38,0.14);
+      border-radius: 11px;
+      background: rgba(254,242,242,0.82);
+      color: #B42318;
+      font-size: 11px;
+      line-height: 1.4;
+    }
+    .beeexy-access-error[hidden] { display: none; }
+    .beeexy-access-submit {
+      width: 100%;
+      height: 50px;
+      border: 0;
+      border-radius: 13px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      background: #4340E8;
+      color: #FFFFFF;
+      cursor: pointer;
+      font: 600 14px 'Plus Jakarta Sans', sans-serif;
+      box-shadow: 0 10px 24px rgba(67,64,232,0.22);
+      transition: transform .12s ease, opacity .15s ease;
+    }
+    .beeexy-access-submit:hover { opacity: 0.94; }
+    .beeexy-access-submit:active { transform: scale(0.99); }
+    .beeexy-access-note {
+      margin-top: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      color: #8A8A9B;
+      font-size: 10px;
+      font-weight: 300;
+    }
+    @media (max-width: 480px) {
+      .beeexy-access-gate {
+        padding: 18px;
+        background: #F7F7FB;
+      }
+      .beeexy-access-card {
+        padding: 24px 22px;
+        border-radius: 22px;
+        box-shadow: 0 18px 50px rgba(15,15,20,0.10);
+      }
     }
 
     /* ── Desktop background ── */
@@ -8220,10 +8405,47 @@
 </head>
 <body>
 
-  <div class="desktop-bg"></div>
+  <section class="beeexy-access-gate" id="beeexyAccessGate" aria-labelledby="beeexyAccessTitle">
+    <div class="beeexy-access-card">
+      <div class="beeexy-access-brand" aria-label="Beeexy">
+        <span class="beeexy-access-mark" aria-hidden="true">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 8L9 4l-3 8H2"/></svg>
+        </span>
+        <span class="beeexy-access-wordmark">Beeexy</span>
+      </div>
+      <span class="beeexy-access-eyebrow">Private demo</span>
+      <h1 class="beeexy-access-title" id="beeexyAccessTitle">Welcome to Beeexy</h1>
+      <p class="beeexy-access-copy">Enter your access details to continue to the private presentation.</p>
+      <form id="beeexyAccessForm" novalidate>
+        <label class="beeexy-access-field">
+          <span class="beeexy-access-label">Username</span>
+          <input class="beeexy-access-input" id="beeexyAccessUsername" name="username" type="text" autocomplete="username" placeholder="Enter username" required spellcheck="false" />
+        </label>
+        <label class="beeexy-access-field">
+          <span class="beeexy-access-label">Password</span>
+          <input class="beeexy-access-input" id="beeexyAccessPassword" name="password" type="password" autocomplete="current-password" placeholder="Enter password" required />
+        </label>
+        <label class="beeexy-access-field">
+          <span class="beeexy-access-label">Keyword</span>
+          <input class="beeexy-access-input" id="beeexyAccessKeyword" name="keyword" type="text" autocomplete="off" placeholder="Enter keyword" required spellcheck="false" />
+        </label>
+        <div class="beeexy-access-error" id="beeexyAccessError" role="alert" aria-live="polite" hidden>Incorrect credentials. Please try again.</div>
+        <button class="beeexy-access-submit" type="submit">
+          Enter Beeexy
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </button>
+      </form>
+      <div class="beeexy-access-note">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+        Private presentation access
+      </div>
+    </div>
+  </section>
+
+  <div class="desktop-bg" data-beeexy-protected aria-hidden="true"></div>
 
   <!-- ── Phone frame ── -->
-  <div class="phone-frame">
+  <div class="phone-frame" data-beeexy-protected aria-hidden="true" inert>
     <div class="phone-screen">
 
       <div class="status-notch"></div>
@@ -23027,6 +23249,76 @@
       }
     }
 
+</script>
+
+<script>
+  (() => {
+    const accessStorageKey = 'beeexyDemoAccess';
+    const accessForm = document.getElementById('beeexyAccessForm');
+    const accessGate = document.getElementById('beeexyAccessGate');
+    const accessError = document.getElementById('beeexyAccessError');
+    const usernameInput = document.getElementById('beeexyAccessUsername');
+    const passwordInput = document.getElementById('beeexyAccessPassword');
+    const keywordInput = document.getElementById('beeexyAccessKeyword');
+    const protectedContent = document.querySelectorAll('[data-beeexy-protected]');
+
+    function hasSessionAccess() {
+      try {
+        return sessionStorage.getItem(accessStorageKey) === 'granted';
+      } catch (error) {
+        return false;
+      }
+    }
+
+    function setDemoAccess(granted) {
+      document.documentElement.classList.toggle('beeexy-access-granted', granted);
+      accessGate.hidden = granted;
+      protectedContent.forEach((element) => {
+        if (granted) {
+          element.removeAttribute('inert');
+          element.removeAttribute('aria-hidden');
+        } else {
+          element.setAttribute('inert', '');
+          element.setAttribute('aria-hidden', 'true');
+        }
+      });
+    }
+
+    accessForm.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        accessForm.requestSubmit();
+      }
+    });
+
+    accessForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const credentialsAreValid =
+        usernameInput.value === 'Beeexyletsgo' &&
+        passwordInput.value === 'Beeexy1.@' &&
+        keywordInput.value === 'Lucas';
+
+      if (!credentialsAreValid) {
+        accessError.hidden = false;
+        return;
+      }
+
+      try {
+        sessionStorage.setItem(accessStorageKey, 'granted');
+      } catch (error) {}
+      accessError.hidden = true;
+      accessForm.reset();
+      setDemoAccess(true);
+    });
+
+    accessForm.addEventListener('input', () => {
+      accessError.hidden = true;
+    });
+
+    const sessionAccessGranted = hasSessionAccess();
+    setDemoAccess(sessionAccessGranted);
+    if (!sessionAccessGranted) usernameInput.focus();
+  })();
 </script>
 
 </body>
